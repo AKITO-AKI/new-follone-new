@@ -13,6 +13,27 @@
   const $ = (sel, root=document) => root.querySelector(sel);
   const clamp01 = (v) => Math.max(0, Math.min(1, Number(v)||0));
 
+  // ------------------------------------------------------------
+  // Hotfix helpers
+  // - Some recent merges accidentally removed isoDate(), which broke init.
+  // - Some async paths referenced `log` before local logger setup.
+  // Use `var` so re-executing this script won’t throw redeclare errors.
+  // ------------------------------------------------------------
+  // eslint-disable-next-line no-var
+  var isoDate = (typeof isoDate === 'function') ? isoDate : function(ts = Date.now()) {
+    const d = new Date(ts);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  // eslint-disable-next-line no-var
+  var log = (typeof log === 'function') ? log : function(...args) {
+    // Keep it lightweight; later we rebind to structured logger.
+    console.log('[options]', ...args);
+  };
+
   // -----------------------------
   // Character theme (UI accent)
   // -----------------------------
@@ -323,6 +344,7 @@
     qsSoft: $('#qsSoft'),
     qsAuto: $('#qsAuto'),
     qsNotify: $('#qsNotify'),
+    qsYumeTheme: $('#qsYumeTheme'),
     qsSpotL: $('#qsSpotL'),
     qsSpotN: $('#qsSpotN'),
     qsSpotH: $('#qsSpotH'),
@@ -368,6 +390,17 @@
     rpgNext: $('#rpgNext'),
     btnClaimDemo: $('#btnClaimDemo'),
     btnEquipDemo: $('#btnEquipDemo'),
+    btnSyncRewards: $('#btnSyncRewards'),
+    btnOpenQuest: $('#btnOpenQuest'),
+    invHead: $('#invHead'),
+    invFx: $('#invFx'),
+    invHeadEmpty: $('#invHeadEmpty'),
+    invFxEmpty: $('#invFxEmpty'),
+    // dev inventory
+    btnDevLvMax: $('#btnDevLvMax'),
+    btnDevUnlockAll: $('#btnDevUnlockAll'),
+    devInvHead: $('#devInvHead'),
+    devInvFx: $('#devInvFx'),
   };
 
 
@@ -1740,6 +1773,9 @@ function bootPet() {
     });
   }
 
+  const sendMessage = sendSW;
+
+
   async function refreshBackend() {
     // Optional: update app.data.backend if supported
     const resp = await sendSW('FOLLONE_BACKEND_STATUS', {}, 12000);
@@ -1798,6 +1834,7 @@ function bootPet() {
     if (dom.rpgNext) dom.rpgNext.textContent = isFinite(next) ? String(next) : '--';
 
     renderBattlePass(lv);
+    renderInventoryBlocks();
 
     const nr = nextReward(lv);
     if (dom.unlockNextLabel) {
@@ -2177,6 +2214,107 @@ function bindAccessory() {
   }
 }
 
+
+
+function makeInvBtn(id, isOn) {
+  const b = document.createElement('button');
+  b.className = 'hb-btn' + (isOn ? ' hb-btn--pri' : '');
+  b.textContent = id;
+  b.dataset.id = id;
+  return b;
+}
+
+function renderInventoryBlocks() {
+  try {
+    const ownedHead = Array.isArray(app.data.ownedHead) ? app.data.ownedHead : [];
+    const ownedFx = Array.isArray(app.data.ownedFx) ? app.data.ownedFx : [];
+    const eqHead = app.data.equippedHead || '';
+    const eqFx = app.data.equippedFx || '';
+
+    const render = (wrap, emptyEl, list, eq, kind) => {
+      if (!wrap) return;
+      wrap.innerHTML = '';
+      if (emptyEl) emptyEl.style.display = list.length ? 'none' : 'block';
+      if (!list.length && emptyEl) emptyEl.textContent = '--';
+      for (const id of list) {
+        const btn = makeInvBtn(id, id === eq);
+        btn.addEventListener('click', async () => {
+          const nextId = (id === eq) ? '' : id;
+          const msgType = (kind === 'head') ? 'FOLLONE_EQUIP_HEAD' : 'FOLLONE_EQUIP_FX';
+          const res = await sendMessage(msgType, { id: nextId });
+          if (res && res.ok) {
+            if (kind === 'head') app.data.equippedHead = res.equippedHead || '';
+            else app.data.equippedFx = res.equippedFx || '';
+            // refresh owned in case SW normalized
+            if (Array.isArray(res.ownedHead)) app.data.ownedHead = res.ownedHead.map(String);
+            if (Array.isArray(res.ownedFx)) app.data.ownedFx = res.ownedFx.map(String);
+            renderAccessorySelects();
+            renderInventoryBlocks();
+            pushCmdLine('SYS', `${kind} equip: ${nextId || 'none'}`);
+          } else {
+            pushCmdLine('ERR', `${kind} equip failed`);
+          }
+        });
+        wrap.appendChild(btn);
+      }
+    };
+
+    render(dom.invHead, dom.invHeadEmpty, ownedHead, eqHead, 'head');
+    render(dom.invFx, dom.invFxEmpty, ownedFx, eqFx, 'fx');
+
+    // Dev inventories show full catalog when available
+    if (dom.devInvHead || dom.devInvFx) {
+      const h = ownedHead;
+      const f = ownedFx;
+      render(dom.devInvHead, null, h, eqHead, 'head');
+      render(dom.devInvFx, null, f, eqFx, 'fx');
+    }
+  } catch (_) {}
+}
+
+
+function bindInventoryButtons() {
+  if (dom.btnSyncRewards) {
+    dom.btnSyncRewards.addEventListener('click', async () => {
+      const resp = await sendSW('FOLLONE_GET_PROGRESS', {});
+      if (resp && resp.ok) {
+        // Merge into local app data
+        app.data.xp = Number(resp.xp || app.data.xp || 0);
+        app.data.level = Number(resp.level || app.data.level || 1);
+        app.data.ownedHead = Array.isArray(resp.ownedHead) ? resp.ownedHead.map(String) : (app.data.ownedHead || []);
+        app.data.ownedFx = Array.isArray(resp.ownedFx) ? resp.ownedFx.map(String) : (app.data.ownedFx || []);
+        app.data.equippedHead = String(resp.equippedHead || '');
+        app.data.equippedFx = String(resp.equippedFx || '');
+        renderProgress();
+        renderAccessorySelects();
+        renderInventoryBlocks();
+        pushCmdLine('SYS', 'synced');
+      } else {
+        pushCmdLine('ERR', resp?.errorCode || 'sync failed');
+      }
+    });
+  }
+  if (dom.btnOpenQuest) {
+    dom.btnOpenQuest.addEventListener('click', () => { setView('quest'); renderQuest(); });
+  }
+
+  if (dom.btnDevLvMax) {
+    dom.btnDevLvMax.addEventListener('click', async () => {
+      const resp = await sendSW('FOLLONE_DEV_LV_MAX', {});
+      pushCmdLine(resp.ok ? 'SYS' : 'ERR', resp.ok ? 'Lv MAX' : (resp.errorCode || 'lv max failed'));
+      await readAll(); renderProgress(); renderAccessorySelects(); renderInventoryBlocks();
+    });
+  }
+  if (dom.btnDevUnlockAll) {
+    dom.btnDevUnlockAll.addEventListener('click', async () => {
+      const ok = confirm('全アクセを解放しますか？（DEV）');
+      if (!ok) return;
+      const resp = await sendSW('FOLLONE_DEV_UNLOCK_ALL', {});
+      pushCmdLine(resp.ok ? 'SYS' : 'ERR', resp.ok ? 'UNLOCK ALL' : (resp.errorCode || 'unlock failed'));
+      await readAll(); renderProgress(); renderAccessorySelects(); renderInventoryBlocks();
+    });
+  }
+}
 function bindStorageListener() {
     if (!hasChrome() || !chrome.storage?.onChanged) return;
     chrome.storage.onChanged.addListener((changes, area) => {
@@ -2250,6 +2388,7 @@ if (dom.selHead || dom.selFx) {
     bindGlanceAndHelp();
     normalizeTooltips();
     bindAccessory();
+    bindInventoryButtons();
     bindCommandBar();
     setView('home');
     if (dom.nextAction) dom.nextAction.classList.add('is-pulse');
@@ -2390,4 +2529,22 @@ if (dom.selHead || dom.selFx) {
   init().catch(err => {
     console.warn('[options] init failed', err);
   });
+
+
+  // -----------------------------
+  // Phase24: X visual tone (lightweight CSS intervention)
+  // -----------------------------
+  (function initYumeThemeToggle(){
+    const el = dom.qsYumeTheme;
+    if(!el) return;
+    chrome.storage.local.get({ follone_xThemeEnabled: false }, (res)=>{
+      el.checked = !!res.follone_xThemeEnabled;
+    });
+    el.addEventListener('change', ()=>{
+      chrome.storage.local.set({ follone_xThemeEnabled: !!el.checked });
+      // Optional: quick feedback
+      try { speak(el.checked ? 'ゆめかわテーマを有効化した。' : 'ゆめかわテーマを無効化した。', { mood: el.checked ? 'happy' : 'neutral' }); } catch (_) {}
+    });
+  })();
+
 })();

@@ -128,7 +128,7 @@ body{
 .tOState{display:flex; align-items:baseline; gap:8px; font-size:11px; color:rgba(40,20,60,0.60);}
 .tOState b{font-size:12px; color:rgba(40,20,60,0.82);}
 .tOMeters{display:grid; gap:8px; margin-top:10px;}
-.tOMeter{display:grid; grid-template-columns: 74px 1fr; gap:10px; align-items:center;}
+.tOMeter{display:grid; grid-template-columns: 92px 1fr; gap:10px; align-items:center;}
 .tOMeter span{font-size:11px; color:rgba(40,20,60,0.60); font-weight:700;}
 .tBar{height:10px; border-radius:999px; background:rgba(40,20,60,0.08); overflow:hidden; border:1px solid var(--line);}
 .tBar i{display:block; height:100%; background:rgba(155,135,255,0.22);}
@@ -190,16 +190,16 @@ body{
 .tMuted{opacity:0.9}
 
 /* Tutorial-like character guide */
-.tGuide{position:relative; min-height:0; display:grid; grid-template-columns: 74px 1fr; gap:10px; align-items:flex-end;}
+.tGuide{position:relative; min-height:0; display:grid; grid-template-columns: 92px 1fr; gap:10px; align-items:flex-end;}
 .tGuidePet{
-  width:74px; height:74px;
+  width:92px; height:92px;
   border-radius:18px;
   border:1px solid var(--line);
   background:var(--panel2);
   display:none; align-items:center; justify-content:center;
   box-shadow:var(--shadow);
 }
-#guidePet{width:64px; height:64px; image-rendering:pixelated;}
+#guidePet{width:84px; height:84px; image-rendering:pixelated;}
 
 .tBubble{
   position:relative;

@@ -299,6 +299,8 @@
     <label class="hb-check" data-tip="強い介入の前にソフトな注意を出す"><input id="qsWarn" type="checkbox"/> Soft Warning</label>
     <label class="hb-check" data-tip="表示されている投稿を自動で解析"><input checked="" id="qsAuto" type="checkbox"/> Auto Scan</label>
     <label class="hb-check" data-tip="Spotlight時に通知を出す (対応ブラウザのみ)"><input id="qsNotify" type="checkbox"/> Notify</label>
+    <label class="hb-check" data-tip="Xの背景/カードを『ゆめかわ寄せ』にする（軽量CSS・ON/OFF可）"><input id="qsYumeTheme" type="checkbox"/> Yume Theme</label>
+
   </div>
 
   <div class="hb-hr"></div>
@@ -374,10 +376,34 @@
 <div class="hb-kv__row"><span>xp</span><b id="rpgXp">--</b></div>
 <div class="hb-kv__row"><span>next</span><b id="rpgNext">--</b></div>
 </div>
-<div class="hb-row hb-row--tight">
-<button class="hb-btn" id="btnClaimDemo">CLAIM (demo)</button>
-<button class="hb-btn" id="btnEquipDemo">EQUIP (demo)</button>
+
+<div class="hb-card hb-card--wide">
+  <div class="hb-card__hd">INVENTORY</div>
+  <div class="hb-mini hb-mini--muted">クリックで装備 / もう一度で外す（none）</div>
+
+  <div class="hb-row" style="gap:10px; flex-wrap:wrap;">
+    <div class="hb-mini" style="min-width:48px;">head</div>
+    <div class="hb-mini" id="invHeadEmpty" style="opacity:.7;">--</div>
+  </div>
+  <div class="hb-row" id="invHead" style="gap:8px; flex-wrap:wrap; margin-top:8px;"></div>
+
+  <div class="hb-hr"></div>
+
+  <div class="hb-row" style="gap:10px; flex-wrap:wrap;">
+    <div class="hb-mini" style="min-width:48px;">fx</div>
+    <div class="hb-mini" id="invFxEmpty" style="opacity:.7;">--</div>
+  </div>
+  <div class="hb-row" id="invFx" style="gap:8px; flex-wrap:wrap; margin-top:8px;"></div>
+
+  <div class="hb-hr"></div>
+
+  <div class="hb-row hb-row--tight">
+    <button class="hb-btn" id="btnSyncRewards">SYNC</button>
+    <button class="hb-btn hb-btn--pri" id="btnOpenQuest">OPEN QUEST</button>
+  </div>
+  <div class="hb-mini hb-mini--muted" id="rpgNote">※ 解放はLvに連動。達成→XP→自動解放→ここで装備。</div>
 </div>
+
 <div class="hb-mini hb-mini--muted" id="rpgNote">※ 解放/装備はPhase3でUI完成。今は安全に“見える化”のみ。</div>
 </div>
 </div>
@@ -431,6 +457,22 @@
               <button class="hb-btn hb-btn--pri" id="btnHardReset">HARD RESET</button>
             </div>
             <div class="hb-mini">※HARD RESETはストレージ初期化＋チュートリアル未完へ戻します。</div>
+
+          <div class="hb-card hb-card--wide">
+            <div class="hb-card__hd">INVENTORY (DEV)</div>
+            <div class="hb-mini hb-mini--muted">Lv MAX / 全解放 / 装備確認</div>
+            <div class="hb-row hb-row--tight">
+              <button class="hb-btn" id="btnDevLvMax">LV MAX</button>
+              <button class="hb-btn hb-btn--pri" id="btnDevUnlockAll">UNLOCK ALL</button>
+            </div>
+            <div class="hb-hr"></div>
+            <div class="hb-mini">head</div>
+            <div class="hb-row" id="devInvHead" style="gap:8px; flex-wrap:wrap; margin-top:6px;"></div>
+            <div class="hb-hr"></div>
+            <div class="hb-mini">fx</div>
+            <div class="hb-row" id="devInvFx" style="gap:8px; flex-wrap:wrap; margin-top:6px;"></div>
+          </div>
+
           </div>
         </div>
       </div>

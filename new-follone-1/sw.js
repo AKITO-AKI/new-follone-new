@@ -131,6 +131,50 @@ function todayKeyJST() {
   return `${y}-${m}-${day}`;
 }
 
+
+// ----------------------------
+// Utility: notifications (non-artistic, ops)
+// ----------------------------
+function canNotify() {
+  return typeof chrome !== "undefined" && chrome.notifications && chrome.notifications.create;
+}
+
+function notifyOps(title, message) {
+  try {
+    if (!canNotify()) return;
+    chrome.notifications.create({
+      type: "basic",
+      iconUrl: chrome.runtime.getURL("icons/icon128.png"),
+      title: String(title || "CanSee"),
+      message: String(message || ""),
+      priority: 0,
+      silent: false,
+    });
+  } catch (_) {}
+}
+
+// ----------------------------
+// Utility: accessory catalog (cached)
+// ----------------------------
+let _accCatalog = null;
+
+async function getAccessoryCatalog() {
+  if (_accCatalog) return _accCatalog;
+  const url = chrome.runtime.getURL("pet/data/accessories/accessories.json");
+  const resp = await fetch(url);
+  const json = await resp.json();
+  const assets = json?.content?.assets || json?.assets || [];
+  const head = [];
+  const fx = [];
+  for (const a of assets) {
+    if (!a || !a.id) continue;
+    if (a.slot === "head") head.push(a.id);
+    else if (a.slot === "fx") fx.push(a.id);
+  }
+  _accCatalog = { head, fx };
+  return _accCatalog;
+}
+
 function weekKeyJST() {
   // ISO-ish week key: YYYY-Www
   const d = new Date();
@@ -723,6 +767,68 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         errorCode: s.errorCode,
         error: s.error
       });
+      return;
+    }
+
+
+    // ----------------------------
+    // Phase20: Developer tools (Lv/Accessories)
+    // ----------------------------
+    if (msg.type === "FOLLONE_NOTIFY") {
+      notifyOps(msg.title || "CanSee", msg.message || "");
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (msg.type === "FOLLONE_DEV_GET_INVENTORY") {
+      const keys = ["follone_xp", "follone_level", "follone_ownedHead", "follone_ownedFx", "follone_equippedHead", "follone_equippedFx"];
+      const st = await chrome.storage.local.get(keys);
+      const cat = await getAccessoryCatalog();
+      sendResponse({
+        ok: true,
+        xp: st.follone_xp || 0,
+        level: st.follone_level || 1,
+        ownedHead: Array.isArray(st.follone_ownedHead) ? st.follone_ownedHead : [],
+        ownedFx: Array.isArray(st.follone_ownedFx) ? st.follone_ownedFx : [],
+        equippedHead: st.follone_equippedHead || "",
+        equippedFx: st.follone_equippedFx || "",
+        allHead: cat.head,
+        allFx: cat.fx,
+        maxLevel: XP_LEVELS.length,
+      });
+      return;
+    }
+
+    if (msg.type === "FOLLONE_DEV_LV_MAX") {
+      const maxLv = XP_LEVELS.length;
+      const maxXp = XP_LEVELS[maxLv - 1] ?? XP_LEVELS[XP_LEVELS.length - 1] ?? 0;
+      await chrome.storage.local.set({ follone_level: maxLv, follone_xp: maxXp });
+      notifyOps("CanSee DEV", "Lv を MAX にしました");
+      sendResponse({ ok: true, level: maxLv, xp: maxXp });
+      return;
+    }
+
+    if (msg.type === "FOLLONE_DEV_UNLOCK_ALL") {
+      const cat = await getAccessoryCatalog();
+      await chrome.storage.local.set({ follone_ownedHead: cat.head, follone_ownedFx: cat.fx });
+      notifyOps("CanSee DEV", "全アクセを解放しました");
+      sendResponse({ ok: true, ownedHead: cat.head, ownedFx: cat.fx });
+      return;
+    }
+
+    if (msg.type === "FOLLONE_DEV_EQUIP") {
+      const slot = msg.slot === "fx" ? "fx" : "head";
+      const id = String(msg.id || "");
+      const cat = await getAccessoryCatalog();
+      const ok = (slot === "head" ? cat.head : cat.fx).includes(id) || id === "";
+      if (!ok) {
+        sendResponse({ ok: false, errorCode: "INVALID_ACCESSORY" });
+        return;
+      }
+      if (slot === "head") await chrome.storage.local.set({ follone_equippedHead: id });
+      else await chrome.storage.local.set({ follone_equippedFx: id });
+      notifyOps("CanSee DEV", `${slot.toUpperCase()} を装備: ${id || "none"}`);
+      sendResponse({ ok: true });
       return;
     }
 

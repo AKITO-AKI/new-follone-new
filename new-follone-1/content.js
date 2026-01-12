@@ -92,6 +92,88 @@
     skipEmojiOnly: true
   };
 
+  // -----------------------------
+  // Phase25-C: Robustness core (self-heal + safe logger)
+  // -----------------------------
+  // NOTE: Use a function declaration so `log(...)` never ReferenceErrors.
+  function log(level, tag, msg, data) {
+    try {
+      const lv = String(level || "info").toLowerCase();
+      const cur = String(settings.logLevel || "info").toLowerCase();
+      const order = { "debug": 0, "info": 1, "warn": 2, "error": 3 };
+      const ok = (order[lv] ?? 1) >= (order[cur] ?? 1);
+      if (!ok) return;
+
+      const parts = [];
+      if (tag) parts.push(tag);
+      if (msg) parts.push(msg);
+
+      // Keep console output compact (school PC friendly)
+      if (data !== undefined) {
+        // eslint-disable-next-line no-console
+        console.log("[CanSee]", ...parts, data);
+      } else {
+        // eslint-disable-next-line no-console
+        console.log("[CanSee]", ...parts);
+      }
+    } catch (_) {}
+  }
+
+  const E = Object.freeze({
+    E01: "E01", // Prompt API unavailable
+    E02: "E02", // timeout / stuck inFlight
+    E03: "E03", // invalid response
+    E04: "E04", // DOM read failure
+    E05: "E05", // rate limited / congestion
+    E06: "E06"  // internal exception
+  });
+
+  function nowMs() { return Date.now(); }
+  function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
+
+  function errCodeFromException(e) {
+    const s = String(e || "");
+    if (/timeout/i.test(s)) return E.E02;
+    if (/rate|429|too many/i.test(s)) return E.E05;
+    if (/unavailable|not[_\s-]*ready/i.test(s)) return E.E01;
+    if (/json|parse|schema|invalid/i.test(s)) return E.E03;
+    return E.E06;
+  }
+
+  function pushEvent(type, payload) {
+    try {
+      if (!state._events) state._events = [];
+      state._events.push({ t: nowMs(), type, ...(payload || {}) });
+      if (state._events.length > 80) state._events.splice(0, state._events.length - 80);
+    } catch (_) {}
+  }
+
+
+  function markChip(elem, label, kind) {
+    try {
+      if (!elem) return;
+      const host = elem.querySelector?.("[data-testid='tweet']") || elem;
+      let bb = host.querySelector?.(".cansee-post-chip");
+      if (!bb) {
+        bb = document.createElement("div");
+        bb.className = "cansee-post-chip";
+        bb.style.pointerEvents = "none";
+        // Ensure positioning context
+        const st = getComputedStyle(host);
+        if (st.position === "static") host.style.position = "relative";
+        host.appendChild(bb);
+      }
+      bb.textContent = String(label || "");
+      bb.dataset.kind = String(kind || "info");
+      if (!bb.textContent) bb.remove();
+    } catch (_) {}
+  }
+  // expose minimal debug helper (safe)
+  window.__canseeDebug = window.__canseeDebug || {};
+  window.__canseeDebug.getRecentEvents = () => {
+    try { return (state._events || []).slice(-80); } catch (_) { return []; }
+  };
+
   async function loadSettings() {
     // Read all known keys (missing keys fall back to defaults)
     const keys = [
@@ -205,6 +287,17 @@
     session: null,
     sessionStatus: "not_ready", // not_ready | downloading | ready | unavailable | mock | off
     inFlight: false,
+    inFlightSinceTs: 0,
+    inFlightBatch: null,
+    inFlightToken: 0,
+    retryCounts: new Map(),
+    backoffUntilTs: 0,
+    failStreak: 0,
+    lastDiscoveryTs: 0,
+    lastAnalyzeTs: 0,
+    watchdogId: 0,
+    recoveringUntilTs: 0,
+    _events: [],
     lastScrollTs: Date.now(),
     lastUserActivityTs: Date.now(),
     lastInactiveSuggestTs: 0,
@@ -506,128 +599,10 @@ function bindEquipStorageListener() {
     try { startPetAnimLoop(); } catch (_) {}
   }
 
-  function startPetAnimLoop(){
-    const a = petUI.anim;
-    if (a.started) return;
-    a.started = true;
-
-    const step = (t) => {
-      // Stop if widget is gone (e.g. SPA nav). We'll restart on next mount.
-      if (!document.getElementById("follone-widget")) {
-        a.started = false;
-        a.raf = 0;
-        return;
-      }
-
-      a.raf = requestAnimationFrame(step);
-
-      // Throttle a bit to keep CPU reasonable (about 30fps)
-      if (t - (a.lastRenderAt || 0) < 33) return;
-      a.lastRenderAt = t;
-
-      // Require assets
-      if (!petUI.char || petUI.engines.size === 0) return;
-
-      // Blink scheduling
-      if (t >= (a.nextBlinkAt || 0)) {
-        a.blinkUntil = t + 140;
-        a.nextBlinkAt = t + 1800 + Math.random() * 2200;
-      }
-
-      let eyes = (t <= (a.blinkUntil || 0)) ? "blink" : "normal";
-      if (t <= (a.eyesOverrideUntil || 0) && a.eyesVariant) eyes = a.eyesVariant;
-
-      let mouth = "idle";
-      if (t <= (a.mouthOverrideUntil || 0)) {
-        if (t >= (a.mouthNextFlipAt || 0)) {
-          const stepMs = 90 + Math.random() * 50;
-          a.mouthNextFlipAt = t + stepMs;
-          a.mouthFlipIdx = (a.mouthFlipIdx + 1) % a.mouthFlipSeq.length;
-          a.mouthVariant = a.mouthFlipSeq[a.mouthFlipIdx] || "talk";
-        }
-        mouth = a.mouthVariant || "talk";
-      }
-
-      for (const [_containerId, eng] of petUI.engines.entries()) {
-        try {
-          eng.renderPet({
-            char: petUI.char,
-            accessories: petUI.accessories,
-            eyesVariant: eyes,
-            mouthVariant: mouth,
-            equip: { head: state.equippedHead || null, fx: state.equippedFx || null }
-          });
-        } catch (_) {}
-      }
-    };
-
-    a.raf = requestAnimationFrame(step);
-  }
-
-
-
-
-
-  // -----------------------------
-  // Logging
-  // -----------------------------
-  const LOG_PREFIX = "[follone]";
-  const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
-  const ring = [];
-  const RING_MAX = 80;
-
-  function shouldLog(level) {
-    if (!settings.debug) return false;
-    const cur = LEVELS[settings.logLevel] ?? 20;
-    const want = LEVELS[level] ?? 20;
-    return want >= cur;
-  }
-
-  function pushRing(line) {
-    ring.push(line);
-    if (ring.length > RING_MAX) ring.shift();
-    const box = document.getElementById("follone-logbox");
-    if (box) {
-      box.textContent = ring.slice(-10).join("\n");
-    }
-  }
-
-  function log(level, tag, ...args) {
-    if (!shouldLog(level)) return;
-    const t = new Date().toISOString().slice(11, 19);
-    const head = `${LOG_PREFIX} ${t} ${tag}`;
-    const fn = console[level] || console.log;
-    fn.call(console, head, ...args);
-    try {
-      const line = [head, ...args.map(a => (typeof a === "string" ? a : JSON.stringify(a)))].join(" ");
-      pushRing(line.length > 400 ? line.slice(0, 400) + "…" : line);
-    } catch (_e) {
-      log("error","[BACKEND]","create() failed -> mock", String(_e));
-      pushRing(head + " (unserializable)");
-    }
-  }
-
-
-
-  // -----------------------------
-  // Extension context guards (prevents noisy "Extension context invalidated" crashes after reload/update)
-  // -----------------------------
-  function isContextInvalidated(err) {
-    const s = String(err && (err.message || err) || "");
-    return (
-      s.includes("Extension context invalidated") ||
-      s.includes("context invalidated") ||
-      s.includes("message channel closed") ||
-      s.includes("The message port closed") ||
-      s.includes("A listener indicated an asynchronous response")
-    );
-  }
-
   
-  // ---------------------------------
-  // Extension context invalidation UX
-  // ---------------------------------
-  function showCtxBanner() {
+  // (dedup) startPetAnimLoop was defined twice; second copy removed.
+
+function showCtxBanner() {
     try {
       const existing = document.getElementById("follone-ctx-banner");
       if (existing) return;
@@ -2196,6 +2171,9 @@ function installSearchLoaderHook() {
     state.analyzeTimerId = 0;
     state.analyzeScheduled = false;
 
+    // Stop self-heal watchdog
+    stopSelfHeal();
+
     // Stop interval
     try { if (state.inactiveTickId) clearInterval(state.inactiveTickId); } catch (_) {}
     state.inactiveTickId = 0;
@@ -3649,7 +3627,82 @@ function choosePriorityBatch(maxN) {
     }, Math.max(0, d));
   }
 
+
+  function startSelfHeal() {
+    try {
+      if (state.watchdogId) return;
+      state.watchdogId = setInterval(() => {
+        try {
+          if (state.runtimePaused) return;
+
+          const now = nowMs();
+
+          // Backoff window: don't spam scheduleAnalyze when we're intentionally waiting
+          const inBackoff = state.backoffUntilTs && now < state.backoffUntilTs;
+
+          // Detect stuck inFlight (Phase25-C: self-repair)
+          if (state.inFlight && state.inFlightSinceTs && now - state.inFlightSinceTs > 45000) {
+            const batch = state.inFlightBatch || [];
+            pushEvent("watchdog_timeout", { code: E.E02, batchSize: batch.length });
+            log("warn", "[WATCHDOG]", "timeout -> recover", { batchSize: batch.length });
+
+            state.inFlightToken = (state.inFlightToken || 0) + 1; // invalidate old inFlight result
+            state.inFlight = false;
+            state.inFlightSinceTs = 0;
+
+            // Requeue posts (retry up to 3)
+            for (const p of batch) {
+              if (!p || !p.id) continue;
+              const n = (state.retryCounts.get(p.id) || 0) + 1;
+              state.retryCounts.set(p.id, n);
+              if (n <= 3) {
+                // put back to the front so we keep "top priority"
+                state.analyzeLow.unshift(p);
+                markChip(p.elem, `retry ${n}/3`, "retry");
+              } else {
+                markChip(p.elem, `error ${E.E02}`, "error");
+              }
+            }
+
+            state.inFlightBatch = null;
+            state.failStreak = clamp((state.failStreak || 0) + 1, 0, 12);
+            state.recoveringUntilTs = now + 2500;
+
+            // schedule immediate analyze after small delay to let UI breathe
+            scheduleAnalyze(80);
+            return;
+          }
+
+          // If backlog exists and nothing scheduled, keep the loop alive
+          const backlog = (state.analyzeHigh?.length || 0) + (state.analyzeLow?.length || 0);
+          if (backlog && !state.analyzeScheduled && !state.inFlight && !inBackoff) {
+            scheduleAnalyze(0);
+          }
+
+          // If discovery queue has items but not scheduled
+          if ((state.discoverQueue?.length || 0) && !state.discoverScheduled) {
+            scheduleDiscovery(0);
+          }
+
+          // If analyze hasn't ticked in a while but backlog exists, kick it
+          if (backlog && now - (state.lastAnalyzeTs || 0) > 4000 && !state.inFlight && !inBackoff) {
+            scheduleAnalyze(0);
+          }
+        } catch (e) {
+          // never crash the watchdog
+          log("error", "[WATCHDOG]", "tick failed", String(e));
+        }
+      }, 900);
+    } catch (_) {}
+  }
+
+  function stopSelfHeal() {
+    try { if (state.watchdogId) clearInterval(state.watchdogId); } catch (_) {}
+    state.watchdogId = 0;
+  }
   async function analyzePump() {
+    state.lastAnalyzeTs = nowMs();
+    pushEvent("analyze_pump", { high: state.analyzeHigh.length, low: state.analyzeLow.length, inFlight: !!state.inFlight });
     state.analyzeScheduled = false;
     if (state.runtimePaused) return;
     ensureRuntimeMaps();
@@ -3695,9 +3748,19 @@ function choosePriorityBatch(maxN) {
     if (!batch.length) return;
 
     state.inFlight = true;
+    state.inFlightSinceTs = nowMs();
+    state.inFlightBatch = batch.slice();
+    state.inFlightToken = (state.inFlightToken || 0) + 1;
+    const myToken = state.inFlightToken;
+    pushEvent("inflight_start", { n: batch.length, token: myToken });
     try {
-      log("info", "[CLASSIFY]", "batch", batch.map(x => x.id), { maxN, backlog });
+      log("info", "[CLASSIFY]", "batch", batch.map(x => x.id), { maxN, backlog, token: myToken });
       const results = await classifyBatch(batch);
+
+      if (myToken !== state.inFlightToken) {
+        log("warn", "[CLASSIFY]", "late result discarded", { myToken, cur: state.inFlightToken, n: results?.length || 0 });
+        return;
+      }
       if (state.runtimePaused || (state.pauseEpoch || 0) !== epoch) {
         log("debug","[CLASSIFY]","discarded due to pause", { paused: state.runtimePaused });
         return;
@@ -3737,11 +3800,45 @@ function choosePriorityBatch(maxN) {
       }
       await maybeShowFilterBubble();
     } catch (e) {
-      log("error", "[CLASSIFY]", "failed", String(e));
+      const code = errCodeFromException(e);
+      state.failStreak = clamp((state.failStreak || 0) + 1, 0, 12);
+
+      // Requeue posts (retry up to 3)
+      for (const p of batch) {
+        if (!p || !p.id) continue;
+        const n = (state.retryCounts.get(p.id) || 0) + 1;
+        state.retryCounts.set(p.id, n);
+        if (n <= 3) {
+          // put back to the front so we keep "top priority"
+          state.analyzeLow.unshift(p);
+          markChip(p.elem, `retry ${n}/3`, "retry");
+        } else {
+          markChip(p.elem, `error ${code}`, "error");
+        }
+      }
+
+      // Backoff grows with fail streak (max ~12s)
+      const backoffMs = clamp(400 * (2 ** Math.min(5, state.failStreak)), 400, 12000);
+      state.backoffUntilTs = nowMs() + backoffMs;
+      pushEvent("classify_failed", { code, backoffMs });
+      log("error", "[CLASSIFY]", `failed ${code}`, String(e));
     } finally {
-      state.inFlight = false;
+      // Success path resets failStreak gently
+      if (!state.backoffUntilTs || nowMs() >= state.backoffUntilTs) {
+        state.failStreak = clamp((state.failStreak || 0) - 1, 0, 12);
+      }
+      if (myToken === state.inFlightToken) {
+        state.inFlight = false;
+        state.inFlightSinceTs = 0;
+        state.inFlightBatch = null;
+        pushEvent("inflight_end", { token: myToken });
+      }
+
       // Continue processing backlog
-      if (state.analyzeHigh.length + state.analyzeLow.length) scheduleAnalyze(40);
+      if (state.analyzeHigh.length + state.analyzeLow.length) {
+        const d = (state.backoffUntilTs && nowMs() < state.backoffUntilTs) ? (state.backoffUntilTs - nowMs()) : 40;
+        scheduleAnalyze(d);
+      }
     }
   }
 
@@ -4143,6 +4240,7 @@ function maybeApplyResultToElement(elem, res, ctx) {
     // Kick initial discovery/analyze
     scheduleDiscovery(0);
     scheduleAnalyze(0);
+    startSelfHeal();
   }
 
   function scheduleDiscovery(delayMs) {
@@ -4158,6 +4256,8 @@ function maybeApplyResultToElement(elem, res, ctx) {
   }
 
   function discoveryPump() {
+    state.lastDiscoveryTs = nowMs();
+    pushEvent("discovery_pump", { q: state.discoverQueue.length });
     if (state.runtimePaused) { state.discoverScheduled = false; return; }
     ensureRuntimeMaps();
     const backlogGuard = state.analyzeHigh.length + state.analyzeLow.length;
