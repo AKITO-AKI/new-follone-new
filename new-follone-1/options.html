@@ -533,3 +533,16 @@
 
 </body>
 </html>
+<!-- Phase29-A Architecture -->
+<details class="cs-acc" open>
+  <summary>設計：データフロー（Input → Process → State → View）</summary>
+  <div class="cs-acc__body">
+    <ul>
+      <li><b>Input</b>：DOM観測 / 設定 / API応答</li>
+      <li><b>Process</b>：Queue → Classifier → RenderQueue</li>
+      <li><b>State</b>：単一Store（cansee_stateSnapshot）に集約</li>
+      <li><b>View</b>：Overlay/Optionsは状態を<b>読むだけ</b></li>
+    </ul>
+    <p>「ここが壊れたらどこまで影響するか」をこの流れで説明できます。</p>
+  </div>
+</details>

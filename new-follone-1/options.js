@@ -2548,3 +2548,59 @@ if (dom.selHead || dom.selFx) {
   })();
 
 })();
+
+// === Phase29-B Queue snapshot viewer (pending/processing/done/failed) ===
+
+function csRenderQueueSnapshot(){
+  const hostId = 'csQueueSnapshotPreview';
+  let pre = document.getElementById(hostId);
+  if (!pre){
+    const sum = Array.from(document.querySelectorAll('details.cs-acc summary')).find(s => (s.textContent||'').includes('データフロー'));
+    if (!sum) return;
+    const body = sum.parentElement?.querySelector('.cs-acc__body');
+    if (!body) return;
+
+    const label = document.createElement('div');
+    label.style.marginTop = '10px';
+    label.style.fontWeight = '800';
+    label.textContent = 'QueueSnapshot（pending/processing/done/failed）';
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'cs-logBtns';
+
+    const btn = document.createElement('button');
+    btn.className = 'cs-btn';
+    btn.type = 'button';
+    btn.textContent = 'QueueJSONをコピー';
+    btn.addEventListener('click', () => {
+      const txt = pre ? (pre.textContent || '') : '';
+      navigator.clipboard?.writeText(txt).then(()=>alert('コピーしたよ')).catch(()=>alert('コピーできなかった…'));
+    });
+
+    btnRow.appendChild(btn);
+
+    pre = document.createElement('pre');
+    pre.id = hostId;
+    pre.className = 'cs-logPreview';
+    pre.textContent = '（QueueSnapshot：ここに表示）';
+
+    body.appendChild(label);
+    body.appendChild(btnRow);
+    body.appendChild(pre);
+  }
+
+  chrome.storage.local.get(['cansee_queueSnapshot'], (r) => {
+    const s = r.cansee_queueSnapshot;
+    if (!s){ pre.textContent = '（未取得：Xを開いて稼働させてね）'; return; }
+    pre.textContent = JSON.stringify(s, null, 2);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  csRenderQueueSnapshot();
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    if (changes.cansee_queueSnapshot) csRenderQueueSnapshot();
+  });
+  setInterval(csRenderQueueSnapshot, 8000);
+});

@@ -289,7 +289,6 @@
     inFlight: false,
     inFlightSinceTs: 0,
     inFlightBatch: null,
-    inFlightToken: 0,
     retryCounts: new Map(),
     backoffUntilTs: 0,
     failStreak: 0,
@@ -342,6 +341,9 @@
     intervenedIds: new Set(),
     analyzeHigh: [],
     analyzeLow: [],
+    // Phase29-B: queue state machine meta (pending/processing/done/failed)
+    queueMetaById: new Map(), // id -> {status, tries, enqueuedAt, startTs, endTs, lastError, seq, y}
+    queueDoneTs: [], // timestamps when an item becomes done (for throughput)
     discoverQueue: [],
     discoverScheduled: false,
     analyzeScheduled: false,
@@ -3554,6 +3556,13 @@ const dt = Math.round(performance.now() - t0);
     post.y = y;
     state.canceledIds.delete(post.id);
     state.elemById.set(post.id, post.elem);
+    // Phase29-B: register queue meta
+    try {
+      const rc = state.retryCounts.get(post.id) || 0;
+      ensureQueueMeta(post.id, { seq, y });
+      markQueueStatus(post.id, 'pending', { tries: rc });
+    } catch(_e) {}
+
     try { post.elem.dataset.folloneId = post.id; } catch (_) {}
     try { maybeAttachIdTag(post.elem, post.id); } catch (_) {}
 
@@ -3564,6 +3573,102 @@ const dt = Math.round(performance.now() - t0);
     log("debug", "[QUEUE]", "enqueueForAnalysis", { id: post.id, seq, y, q: state.analyzeLow.length });
   }
 
+
+// === Phase29-B: Queue state machine helpers ===
+const QUEUE_SNAPSHOT_KEY = "cansee_queueSnapshot";
+const MAX_INFLIGHT_BATCHES = 1; // controlled concurrency (API safety)
+const MAX_RETRY = 3;
+
+function ensureQueueMeta(id, seed){
+  if (!id) return null;
+  const m = state.queueMetaById.get(id);
+  if (m) return m;
+  const base = {
+    id,
+    status: "pending", // pending | processing | done | failed
+    tries: 0,
+    enqueuedAt: nowMs(),
+    startTs: 0,
+    endTs: 0,
+    lastError: null,
+    seq: 0,
+    y: 0
+  };
+  if (seed && typeof seed === "object"){
+    if (seed.seq) base.seq = seed.seq;
+    if (seed.y) base.y = seed.y;
+  }
+  state.queueMetaById.set(id, base);
+  return base;
+}
+
+function markQueueStatus(id, status, extra){
+  const m = ensureQueueMeta(id);
+  if (!m) return;
+  m.status = status;
+  if (extra && typeof extra === "object"){
+    if (extra.tries != null) m.tries = extra.tries;
+    if (extra.startTs != null) m.startTs = extra.startTs;
+    if (extra.endTs != null) m.endTs = extra.endTs;
+    if (extra.lastError != null) m.lastError = extra.lastError;
+  }
+  // throughput: record "done" moment
+  if (status === "done"){
+    state.queueDoneTs.push(nowMs());
+    // cap memory
+    if (state.queueDoneTs.length > 2000) state.queueDoneTs = state.queueDoneTs.slice(-1200);
+  }
+  scheduleQueueSnapshot(0);
+}
+
+let _queueSnapTimer = 0;
+function scheduleQueueSnapshot(delay){
+  if (_queueSnapTimer) return;
+  const d = typeof delay === "number" ? delay : 0;
+  _queueSnapTimer = setTimeout(() => {
+    _queueSnapTimer = 0;
+    updateQueueSnapshot();
+  }, Math.max(0, d));
+}
+
+function updateQueueSnapshot(){
+  try{
+    const now = nowMs();
+    const metaVals = Array.from(state.queueMetaById.values());
+    let pending = 0, processing = 0, done = 0, failed = 0;
+    for (const m of metaVals){
+      if (!m || !m.status) continue;
+      if (m.status === "pending") pending++;
+      else if (m.status === "processing") processing++;
+      else if (m.status === "done") done++;
+      else if (m.status === "failed") failed++;
+    }
+    const inflight = state.inFlight ? ((state.inFlightBatch || []).length) : 0;
+
+    // throughput: done per minute (last 60s window scaled to /min)
+    const winMs = 60000;
+    state.queueDoneTs = (state.queueDoneTs || []).filter(ts => (now - ts) <= winMs);
+    const doneLast60s = state.queueDoneTs.length;
+    const donePerMin = doneLast60s; // already per 60s
+    const snap = {
+      at: now,
+      pending, processing, done, failed,
+      inFlight: inflight,
+      backlog: (state.analyzeHigh.length + state.analyzeLow.length),
+      maxInFlightBatches: MAX_INFLIGHT_BATCHES,
+      maxRetry: MAX_RETRY,
+      throughput: { doneLast60s, donePerMin }
+    };
+
+    // push into store for UI (read-only)
+    try {
+      if (window.canseePatchState) canseePatchState({ queue: snap });
+    } catch(_){}
+
+    // persist for Options transparency
+    try { chrome.storage.local.set({ [QUEUE_SNAPSHOT_KEY]: snap }); } catch(_){}
+  } catch(_e){}
+}
 
 function choosePriorityBatch(maxN) {
     ensureRuntimeMaps();
@@ -3646,7 +3751,6 @@ function choosePriorityBatch(maxN) {
             pushEvent("watchdog_timeout", { code: E.E02, batchSize: batch.length });
             log("warn", "[WATCHDOG]", "timeout -> recover", { batchSize: batch.length });
 
-            state.inFlightToken = (state.inFlightToken || 0) + 1; // invalidate old inFlight result
             state.inFlight = false;
             state.inFlightSinceTs = 0;
 
@@ -3658,8 +3762,10 @@ function choosePriorityBatch(maxN) {
               if (n <= 3) {
                 // put back to the front so we keep "top priority"
                 state.analyzeLow.unshift(p);
+                try { markQueueStatus(p.id, "pending", { tries: n, endTs: nowMs(), lastError: E.E02 }); } catch(_e) {}
                 markChip(p.elem, `retry ${n}/3`, "retry");
               } else {
+                try { markQueueStatus(p.id, "failed", { tries: n, endTs: nowMs(), lastError: E.E02 }); } catch(_e) {}
                 markChip(p.elem, `error ${E.E02}`, "error");
               }
             }
@@ -3750,17 +3856,15 @@ function choosePriorityBatch(maxN) {
     state.inFlight = true;
     state.inFlightSinceTs = nowMs();
     state.inFlightBatch = batch.slice();
-    state.inFlightToken = (state.inFlightToken || 0) + 1;
-    const myToken = state.inFlightToken;
-    pushEvent("inflight_start", { n: batch.length, token: myToken });
+    // Phase29-B: mark processing
     try {
-      log("info", "[CLASSIFY]", "batch", batch.map(x => x.id), { maxN, backlog, token: myToken });
-      const results = await classifyBatch(batch);
+      for (const p of batch){ if (p && p.id) markQueueStatus(p.id, 'processing', { startTs: nowMs() }); }
+    } catch(_e) {}
 
-      if (myToken !== state.inFlightToken) {
-        log("warn", "[CLASSIFY]", "late result discarded", { myToken, cur: state.inFlightToken, n: results?.length || 0 });
-        return;
-      }
+    pushEvent("inflight_start", { n: batch.length });
+    try {
+      log("info", "[CLASSIFY]", "batch", batch.map(x => x.id), { maxN, backlog });
+      const results = await classifyBatch(batch);
       if (state.runtimePaused || (state.pauseEpoch || 0) !== epoch) {
         log("debug","[CLASSIFY]","discarded due to pause", { paused: state.runtimePaused });
         return;
@@ -3772,6 +3876,8 @@ function choosePriorityBatch(maxN) {
       for (const r of results) {
         if (!r || !r.id) continue;
         state.riskCache.set(r.id, r);
+        try { markQueueStatus(r.id, 'done', { endTs: nowMs(), lastError: null }); } catch(_e) {}
+
 
         // Persist (id + text-hash)
         try {
@@ -3800,23 +3906,30 @@ function choosePriorityBatch(maxN) {
       }
       await maybeShowFilterBubble();
     } catch (e) {
+      log("error", "[CLASSIFY]", "failed", String(e));
+    } catch (e) {
       const code = errCodeFromException(e);
+
+// Phase29-B: requeue on classify failure (retry/skip/abort)
+try {
+  const batch = state.inFlightBatch || [];
+  for (const p of batch){
+    if (!p || !p.id) continue;
+    const n = (state.retryCounts.get(p.id) || 0) + 1;
+    state.retryCounts.set(p.id, n);
+    if (n <= MAX_RETRY){
+      // keep priority: put back to front
+      state.analyzeLow.unshift(p);
+      markQueueStatus(p.id, "pending", { tries: n, endTs: nowMs(), lastError: String(code || "E??") });
+      markChip(p.elem, `retry ${n}/${MAX_RETRY}`, "retry");
+    } else {
+      markQueueStatus(p.id, "failed", { tries: n, endTs: nowMs(), lastError: String(code || "E??") });
+      markChip(p.elem, `error ${code}`, "error");
+    }
+  }
+} catch(_e) {}
+
       state.failStreak = clamp((state.failStreak || 0) + 1, 0, 12);
-
-      // Requeue posts (retry up to 3)
-      for (const p of batch) {
-        if (!p || !p.id) continue;
-        const n = (state.retryCounts.get(p.id) || 0) + 1;
-        state.retryCounts.set(p.id, n);
-        if (n <= 3) {
-          // put back to the front so we keep "top priority"
-          state.analyzeLow.unshift(p);
-          markChip(p.elem, `retry ${n}/3`, "retry");
-        } else {
-          markChip(p.elem, `error ${code}`, "error");
-        }
-      }
-
       // Backoff grows with fail streak (max ~12s)
       const backoffMs = clamp(400 * (2 ** Math.min(5, state.failStreak)), 400, 12000);
       state.backoffUntilTs = nowMs() + backoffMs;
@@ -3827,12 +3940,10 @@ function choosePriorityBatch(maxN) {
       if (!state.backoffUntilTs || nowMs() >= state.backoffUntilTs) {
         state.failStreak = clamp((state.failStreak || 0) - 1, 0, 12);
       }
-      if (myToken === state.inFlightToken) {
-        state.inFlight = false;
-        state.inFlightSinceTs = 0;
-        state.inFlightBatch = null;
-        pushEvent("inflight_end", { token: myToken });
-      }
+      state.inFlight = false;
+      state.inFlightSinceTs = 0;
+      state.inFlightBatch = null;
+      pushEvent("inflight_end", {});
 
       // Continue processing backlog
       if (state.analyzeHigh.length + state.analyzeLow.length) {
@@ -4563,4 +4674,9 @@ if (!done && (state === "character" || state === "none")) {
     if (!Number.isFinite(n)) return fallback;
     return Math.max(min, Math.min(max, n));
   }
+
+
+// Phase29-B: periodic queue snapshot
+try { setInterval(updateQueueSnapshot, 5000); } catch(_e) {}
+
 })();
