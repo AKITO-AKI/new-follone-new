@@ -328,8 +328,12 @@
 
         <figure class="hb-card hb-fig hb-fig--wide">
           <div class="hb-card__hd">図7：導入前→導入後（ダミー）</div>
-          <div class="hb-mini hb-mini--muted" style="margin:-8px 0 10px;">
-            例：危険投稿率↓ / Focus比率↓ / 1日利用時間↓（※数値は仮）
+          <div class="hb-baRow" style="margin:-8px 0 10px;">
+            <div class="hb-seg" id="baWindowSeg" aria-label="Before/After 期間切替">
+              <button class="hb-seg__btn is-on" type="button" data-ba-window="7">7日</button>
+              <button class="hb-seg__btn" type="button" data-ba-window="30">30日</button>
+            </div>
+            <div class="hb-mini hb-mini--muted">例：危険投稿率↓ / Focus比率↓ / 1日利用時間↓（※数値は仮）</div>
           </div>
           <canvas class="hb-fig__canvas" id="artC7" width="720" height="260"></canvas>
           <figcaption class="hb-mini hb-mini--muted">出典：デモ用（提出時は測定条件・対象期間を明記）</figcaption>

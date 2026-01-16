@@ -3185,6 +3185,7 @@ const dt = Math.round(performance.now() - t0);
   // -----------------------------
   const BIAS_TZ = "Asia/Tokyo";
   const BIAS_STORAGE_KEY = "follone_biasAgg_v2";
+  const RISK_STORAGE_KEY = "follone_riskAgg_v1";
   const BIAS_TOPICS = [
     "社会",
     "政治",
@@ -3332,6 +3333,72 @@ const dt = Math.round(performance.now() - t0);
     scheduleBiasAggFlush();
   }
 
+
+
+  // -----------------------------
+  // Risk aggregation (v1) — for submission-grade Before/After
+  // -----------------------------
+  async function loadRiskAgg() {
+    try {
+      const obj = await chrome.storage.local.get([RISK_STORAGE_KEY]);
+      const cur = obj ? obj[RISK_STORAGE_KEY] : null;
+      if (cur && typeof cur === "object" && cur.day && typeof cur.day === "object") {
+        state.riskAgg = cur;
+      } else {
+        state.riskAgg = { tz: BIAS_TZ, day: {}, updatedAt: Date.now() };
+      }
+      state.riskDayKey = tokyoDayKey(Date.now());
+    } catch (_e) {
+      state.riskAgg = { tz: BIAS_TZ, day: {}, updatedAt: Date.now() };
+      state.riskDayKey = tokyoDayKey(Date.now());
+    }
+  }
+
+  function scheduleRiskAggFlush() {
+    if (!state.riskAgg || !state.riskAggDirty) return;
+    if (state.riskAggFlushTimer) return;
+    state.riskAggFlushTimer = setTimeout(async () => {
+      state.riskAggFlushTimer = 0;
+      if (!state.riskAggDirty || !state.riskAgg) return;
+      state.riskAggDirty = false;
+      state.riskAgg.updatedAt = Date.now();
+      try {
+        await chrome.storage.local.set({ [RISK_STORAGE_KEY]: state.riskAgg });
+      } catch (_e) {
+        // silent
+      }
+    }, 900);
+  }
+
+  function pruneRiskDays(maxDays = 420) {
+    if (!state.riskAgg || !state.riskAgg.day) return;
+    const keys = Object.keys(state.riskAgg.day).sort();
+    if (keys.length <= maxDays) return;
+    const drop = keys.slice(0, Math.max(0, keys.length - maxDays));
+    for (const k of drop) delete state.riskAgg.day[k];
+  }
+
+  function bumpRiskAgg(result) {
+    try {
+      if (!state.riskAgg) return;
+      const dayKey = tokyoDayKey(Date.now());
+      if (dayKey !== state.riskDayKey) state.riskDayKey = dayKey;
+
+      const r = result || {};
+      const cat = String(r.riskCategory || "なし");
+      const score = Number(r.riskScore || 0);
+      const isDanger = (cat && cat !== "なし") || score >= 50;
+
+      const day = state.riskAgg.day[dayKey] || (state.riskAgg.day[dayKey] = { total: 0, danger: 0, cats: {} });
+      day.total = Number(day.total || 0) + 1;
+      if (isDanger) day.danger = Number(day.danger || 0) + 1;
+      if (cat) day.cats[cat] = Number(day.cats[cat] || 0) + 1;
+
+      state.riskAggDirty = true;
+      pruneRiskDays(420);
+      scheduleRiskAggFlush();
+    } catch (_e) {}
+  }
   function normalizedEntropyFromMap(countsMap, total, nAll) {
     const n = Math.max(2, Number(nAll || 0) || countsMap.size || 2);
     if (total <= 0) return 0;
@@ -4015,6 +4082,9 @@ function choosePriorityBatch(maxN) {
         const topic = String(r.topicCategory || "その他");
         updateTopicStats(topic);
 
+        // Risk agg for ARTICLE (danger rate)
+        try { bumpRiskAgg(r); } catch (_e) {}
+
         // If this element is currently fully visible, apply decorations now
         if (isFullyVisible(elem)) {
           maybeApplyResultToElement(elem, r, { from: "analyzePump" });
@@ -4529,6 +4599,7 @@ function maybeApplyResultToElement(elem, res, ctx) {
     await loadUiPrefs();
     bindEquipStorageListener();
     await loadBiasAgg();
+    await loadRiskAgg();
     await loadResultCache();
     log("info","[SETTINGS]","loaded", { enabled: settings.enabled, aiMode: settings.aiMode, debug: settings.debug, logLevel: settings.logLevel, batchSize: settings.batchSize, idleMs: settings.idleMs });
     mountUI();

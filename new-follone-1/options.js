@@ -114,7 +114,10 @@
   // Bias agg (must match content.js key)
   // -----------------------------
   const BIAS_STORAGE_KEY = 'follone_biasAgg_v2';
-  // CanSee: unified storage keys (keep stable across pages)
+  const RISK_STORAGE_KEY = 'follone_riskAgg_v1';
+  
+  const USAGE_STORAGE_KEY = 'follone_usage_v1';
+// CanSee: unified storage keys (keep stable across pages)
   const CANSEE_SELECTED_CHAR_KEY = 'cansee_selected_character_id';
 
 
@@ -570,6 +573,7 @@ unlockNextLabel: $('#unlockNextLabel'),
       level: 1,
       quest: null,
       biasAgg: null,
+      riskAgg: null,
       characterId: 'follone',
       equippedHead: '',
             equippedFx: '',
@@ -617,6 +621,8 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
       'follone_notifyEnabled',
       'follone_spotlightStrength',
       BIAS_STORAGE_KEY,
+      RISK_STORAGE_KEY,
+      USAGE_STORAGE_KEY,
       'follone_backend_availability',
       'follone_backend_session',
       'follone_backend_latencyAvg',
@@ -643,6 +649,7 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
         characterId: 'follone',
         follone_equippedHead: 'bandage',
         [BIAS_STORAGE_KEY]: null,
+        [RISK_STORAGE_KEY]: null,
         follone_quest: null
       };
     }
@@ -1070,7 +1077,7 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
     }
   };
 
-  const ARTICLE_STATE = { lastCiteId: null, citeSeq: 0 };
+  const ARTICLE_STATE = { lastCiteId: null, citeSeq: 0, baWindowDays: 7 };
 
   function renderArticle() {
     // build TOC (once)
@@ -1112,11 +1119,47 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
     // Figure 5-6: submission-grade diagrams
     drawFlowDiagram('artC5');
     drawDeltaCard('artC6');
-    drawBeforeAfterDemo('artC7');
+    drawBeforeAfterAuto('artC7', ARTICLE_STATE.baWindowDays);
+
+    bindBeforeAfterControls();
 
     // citations: smooth jump + highlight
     bindArticleCitations();
     bindReferenceCards();
+  }
+
+
+
+  function bindBeforeAfterControls() {
+    const root = document.querySelector('[data-view="article"]');
+    if (!root) return;
+    const seg = document.getElementById('baWindowSeg');
+    if (!seg) return;
+    if (seg.dataset.bound === '1') return;
+    seg.dataset.bound = '1';
+
+    const updateUI = () => {
+      const cur = Math.max(3, Math.min(60, Math.trunc(Number(ARTICLE_STATE.baWindowDays) || 7)));
+      const btns = [...seg.querySelectorAll('[data-ba-window]')];
+      for (const b of btns) {
+        const n = Math.trunc(Number(b.getAttribute('data-ba-window')||0));
+        b.classList.toggle('is-on', n === cur);
+      }
+      // redraw
+      drawBeforeAfterAuto('artC7', cur);
+    };
+
+    seg.addEventListener('click', (ev) => {
+      const btn = ev.target?.closest?.('[data-ba-window]');
+      if (!btn) return;
+      ev.preventDefault();
+      const n = Math.trunc(Number(btn.getAttribute('data-ba-window')||7));
+      if (!n) return;
+      ARTICLE_STATE.baWindowDays = n;
+      updateUI();
+    }, { passive: false });
+
+    updateUI();
   }
 
   function bindReferenceCards() {
@@ -1474,7 +1517,182 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
     });
   }
 
-  // Figure 7: Before/After (demo)
+  function isoDateJST(ts=Date.now()) {
+    // JST day key: YYYY-MM-DD
+    const d = new Date(ts + 9*60*60*1000);
+    return d.toISOString().slice(0,10);
+  }
+
+  function lastNDaysKeys(n, offsetDays=0) {
+    const out = [];
+    const now = Date.now();
+    for (let i=0;i<n;i++) {
+      const t = now - (i+offsetDays)*86400000;
+      out.push(isoDateJST(t));
+    }
+    return out;
+  }
+
+  function sumUsageSec(usageMap, dayKeys) {
+    let sec = 0;
+    if (!usageMap || typeof usageMap !== 'object') return 0;
+    for (const k of dayKeys) sec += Math.max(0, Number(usageMap[k]||0));
+    return sec;
+  }
+
+  function aggBiasByKeys(biasAgg, dayKeys) {
+    const out = { counts: {}, total: 0, topics: Array.isArray(biasAgg?.topics) ? biasAgg.topics : [] };
+    const day = biasAgg?.day && typeof biasAgg.day === 'object' ? biasAgg.day : null;
+    if (!day) return out;
+
+    for (const k of dayKeys) {
+      const e = day[k];
+      if (!e) continue;
+      const c = e.counts && typeof e.counts === 'object' ? e.counts : {};
+      for (const [t,v] of Object.entries(c)) {
+        out.counts[t] = Number(out.counts[t]||0) + Math.max(0, Number(v||0));
+      }
+      out.total += Math.max(0, Number(e.total||0));
+    }
+    return out;
+  }
+
+  function aggRiskByKeys(riskAgg, dayKeys) {
+    const out = { total: 0, danger: 0, counts: {} };
+    const day = riskAgg?.day && typeof riskAgg.day === 'object' ? riskAgg.day : null;
+    if (!day) return out;
+    for (const k of dayKeys) {
+      const e = day[k];
+      if (!e) continue;
+      out.total += Math.max(0, Number(e.total||0));
+      out.danger += Math.max(0, Number(e.danger||0));
+      const c = e.counts && typeof e.counts === 'object' ? e.counts : {};
+      for (const [cat,v] of Object.entries(c)) {
+        out.counts[cat] = Number(out.counts[cat]||0) + Math.max(0, Number(v||0));
+      }
+    }
+    return out;
+  }
+
+  // Figure 7: Before/After (auto)
+  function drawBeforeAfterAuto(canvasId, windowDays = 7) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    const biasAgg = app?.data?.biasAgg || null;
+    const usageMap = app?.data?.usageMap || {};
+    const riskAgg = app?.data?.riskAgg || null;
+
+    // Define windows: recent N days vs previous N days
+    const N = Math.max(3, Math.min(60, Math.trunc(Number(windowDays) || 7)));
+    const afterKeys = lastNDaysKeys(N, 0);
+    const beforeKeys = lastNDaysKeys(N, N);
+
+    const afterUsage = sumUsageSec(usageMap, afterKeys);
+    const beforeUsage = sumUsageSec(usageMap, beforeKeys);
+
+    const afterBias = calcBiasMetrics(aggBiasByKeys(biasAgg, afterKeys));
+    const beforeBias = calcBiasMetrics(aggBiasByKeys(biasAgg, beforeKeys));
+
+    const afterRisk = aggRiskByKeys(riskAgg, afterKeys);
+    const beforeRisk = aggRiskByKeys(riskAgg, beforeKeys);
+
+    const hasUsage = (afterUsage + beforeUsage) > 0;
+    const hasBias = (afterBias.total + beforeBias.total) > 0;
+    const hasRisk = (afterRisk.total + beforeRisk.total) > 0;
+
+    if (!hasUsage && !hasBias && !hasRisk) {
+      // fallback demo (keeps submission flow alive)
+      drawBeforeAfterDemo(canvasId);
+      return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.floor(canvas.clientWidth * dpr);
+    const h = Math.floor(canvas.clientHeight * dpr);
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    ctx.clearRect(0,0,w,h);
+
+    const pad = 16;
+    ctx.save();
+    ctx.font = `bold ${Math.max(13, Math.floor(14*dpr))}px ui-sans-serif, system-ui`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(40,30,40,0.92)';
+    ctx.fillText(`Before/After（自動） 直近${N}日 vs その前${N}日`, pad, 8);
+
+    ctx.font = `${Math.max(11, Math.floor(12*dpr))}px ui-sans-serif, system-ui`;
+    ctx.fillStyle = 'rgba(70,60,70,0.85)';
+    ctx.fillText('※データが無い指標はスキップして描画します', pad, 30);
+
+    const cards = [];
+    if (hasRisk) {
+      const beforeRate = beforeRisk.total ? (beforeRisk.danger / beforeRisk.total) * 100 : 0;
+      const afterRate = afterRisk.total ? (afterRisk.danger / afterRisk.total) * 100 : 0;
+      cards.push({ title: '危険投稿率', unit: '%', before: Math.round(beforeRate), after: Math.round(afterRate), better: 'down' });
+    }
+    if (hasUsage) {
+      cards.push({
+        title: '利用時間（合計）',
+        unit: 'min',
+        before: Math.round(beforeUsage/60),
+        after: Math.round(afterUsage/60),
+        better: 'down'
+      });
+    }
+    if (hasBias) {
+      cards.push({ title: 'Focus（偏り）', unit: '%', before: Math.round(beforeBias.focus*100), after: Math.round(afterBias.focus*100), better: 'down' });
+      cards.push({ title: 'Variety（多様性）', unit: '%', before: Math.round(beforeBias.variety*100), after: Math.round(afterBias.variety*100), better: 'up' });
+      cards.push({ title: 'Explore（探索）', unit: '%', before: Math.round(beforeBias.explore*100), after: Math.round(afterBias.explore*100), better: 'up' });
+    }
+
+    const boxW = Math.min(260*dpr, (w - pad*2));
+    const boxH = 58*dpr;
+    const gapY = 12*dpr;
+
+    let y = 58*dpr;
+
+    for (const c of cards.slice(0, 4)) {
+      const x = pad;
+      // card bg
+      ctx.fillStyle = 'rgba(255,255,255,0.78)';
+      roundRect(ctx, x, y, boxW, boxH, 14*dpr);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(160,140,160,0.35)';
+      ctx.lineWidth = 1*dpr;
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(40,30,40,0.92)';
+      ctx.font = `bold ${Math.max(12, Math.floor(13*dpr))}px ui-sans-serif, system-ui`;
+      ctx.fillText(c.title, x+12*dpr, y+9*dpr);
+
+      const before = Number(c.before||0);
+      const after = Number(c.after||0);
+      const delta = after - before;
+      const good = (c.better === 'down') ? (delta <= 0) : (delta >= 0);
+
+      ctx.font = `${Math.max(11, Math.floor(12*dpr))}px ui-sans-serif, system-ui`;
+      ctx.fillStyle = 'rgba(70,60,70,0.85)';
+      ctx.fillText(`Before: ${before}${c.unit}  →  After: ${after}${c.unit}`, x+12*dpr, y+30*dpr);
+
+      ctx.textAlign = 'right';
+      ctx.fillStyle = good ? 'rgba(60,120,90,0.95)' : 'rgba(180,80,90,0.95)';
+      ctx.font = `bold ${Math.max(12, Math.floor(13*dpr))}px ui-sans-serif, system-ui`;
+      const sign = delta>0?'+':'';
+      ctx.fillText(`${sign}${delta}${c.unit}`, x+boxW-12*dpr, y+30*dpr);
+      ctx.textAlign = 'left';
+
+      y += boxH + gapY;
+      if (y + boxH > h - pad) break;
+    }
+
+    ctx.restore();
+  }
+
+
+
+  // Figure 7: Before/After (auto; fallback to demo)
   function drawBeforeAfterDemo(canvasId) {
     const metrics = ARTICLE_DATA?.beforeAfterDemo?.metrics || [];
     with2d(canvasId, (ctx, w, h) => {
@@ -3489,7 +3707,7 @@ function bindStorageListener() {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local') return;
 
-      let needProgress = false, needBias = false, needQuest = false;
+      let needProgress = false, needBias = false, needQuest = false, needArticle = false;
 
       if (changes.follone_xp || changes.follone_level) {
         app.data.xp = Number(changes.follone_xp?.newValue ?? app.data.xp);
@@ -3503,6 +3721,15 @@ function bindStorageListener() {
       if (changes[BIAS_STORAGE_KEY]) {
         app.data.biasAgg = changes[BIAS_STORAGE_KEY].newValue;
         needBias = true;
+      }
+      if (changes[RISK_STORAGE_KEY]) {
+        app.data.riskAgg = changes[RISK_STORAGE_KEY].newValue;
+        needArticle = true;
+      }
+      if (changes[USAGE_STORAGE_KEY]) {
+        const v = changes[USAGE_STORAGE_KEY].newValue;
+        app.data.usageMap = (v && typeof v === 'object') ? v : {};
+        needArticle = true;
       }
       if (changes.follone_equippedHead) {
         app.data.equippedHead = changes.follone_equippedHead.newValue || '';
@@ -3527,6 +3754,9 @@ if (dom.selHead || dom.selFx) {
       if (needQuest) renderQuest();
       if (needBias && app.view === 'bias') renderBias();
       renderDev();
+      if ((needBias || needArticle) && app.view === 'article') {
+        renderArticle();
+      }
       if (needBias && app.view === 'home') {
         // keep right-card updated
         renderBias();
@@ -3568,6 +3798,8 @@ if (dom.selHead || dom.selFx) {
     app.data.level = Number(obj.follone_level || xpToLevel(app.data.xp));
     app.data.quest = obj.follone_quest || null;
     app.data.biasAgg = obj[BIAS_STORAGE_KEY] || null;
+    app.data.riskAgg = obj[RISK_STORAGE_KEY] || null;
+    app.data.usageMap = (obj[USAGE_STORAGE_KEY] && typeof obj[USAGE_STORAGE_KEY] === 'object') ? obj[USAGE_STORAGE_KEY] : {};
     app.data.characterId = pickCharacterId(obj);
     app.data.equippedHead = obj.follone_equippedHead || '';
     app.data.equippedFx = obj.follone_equippedFx || '';

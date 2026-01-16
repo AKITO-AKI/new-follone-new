@@ -1695,6 +1695,9 @@ body.hb-modalOpen{overflow:hidden;}
 .hb-fig{ overflow:hidden; }
 .hb-fig--wide{ margin-top:12px; }
 .hb-fig__canvas{ width:100%; height:auto; border-radius:16px; background:rgba(255,255,255,.45); }
+
+.hb-baRow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.hb-baRow .hb-mini{margin:0;}
 .hb-steps{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
 .hb-step{
   padding:12px;
