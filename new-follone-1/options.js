@@ -1058,6 +1058,15 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
     usTeenSocialHours: {
       label: 'Gallup 2023',
       hours: 4.8
+    },
+    // Before/After (demo-only) — submission illustration.
+    // Values are intentionally simple; replace with real logs when ready.
+    beforeAfterDemo: {
+      metrics: [
+        { key: '危険投稿率', unit: '%', before: 18, after: 9, hint: '介入+注意で半減（仮）' },
+        { key: 'Focus比率', unit: '%', before: 62, after: 45, hint: '偏りが緩和（仮）' },
+        { key: '利用時間', unit: '分/日', before: 210, after: 150, hint: '警告+行動変容（仮）' },
+      ]
     }
   };
 
@@ -1103,9 +1112,73 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
     // Figure 5-6: submission-grade diagrams
     drawFlowDiagram('artC5');
     drawDeltaCard('artC6');
+    drawBeforeAfterDemo('artC7');
 
     // citations: smooth jump + highlight
     bindArticleCitations();
+    bindReferenceCards();
+  }
+
+  function bindReferenceCards() {
+    const root = document.querySelector('[data-view="article"]');
+    if (!root) return;
+    if (root.dataset.refsBound === '1') return;
+    root.dataset.refsBound = '1';
+
+    root.addEventListener('click', async (ev) => {
+      const open = ev.target?.closest?.('[data-ref-open]');
+      if (open) {
+        ev.preventDefault();
+        const id = open.getAttribute('data-ref-open');
+        const li = document.querySelector(`.hb-refItem[data-ref-id="${id}"]`);
+        const url = li?.dataset?.url || '';
+        if (!url) return;
+        // reveal URL inline (submission-friendly: easy to copy)
+        open.textContent = url;
+        open.setAttribute('href', url);
+        open.setAttribute('target', '_blank');
+        open.setAttribute('rel', 'noreferrer');
+        return;
+      }
+
+      const copy = ev.target?.closest?.('[data-ref-copy]');
+      if (copy) {
+        ev.preventDefault();
+        const id = copy.getAttribute('data-ref-copy');
+        const li = document.querySelector(`.hb-refItem[data-ref-id="${id}"]`);
+        if (!li) return;
+        const title = li.dataset.title || li.querySelector('.hb-refTitle')?.textContent?.trim() || '';
+        const url = li.dataset.url || '';
+        const pages = li.dataset.pages || '';
+        const acc = li.dataset.accessed || '';
+        const text = `[${id}] ${title}\n${url}\n参照: ${pages}\n閲覧日: ${acc}`.trim();
+
+        let ok = false;
+        try {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+            ok = true;
+          }
+        } catch (_) {}
+        if (!ok) {
+          // fallback
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
+          ta.remove();
+        }
+
+        // small feedback
+        const prev = copy.textContent;
+        copy.textContent = ok ? 'COPIED' : 'FAILED';
+        copy.classList.add('is-on');
+        window.setTimeout(() => { copy.textContent = prev; copy.classList.remove('is-on'); }, 900);
+      }
+    }, { passive: false });
   }
 
   function bindArticleCitations() {
@@ -1397,6 +1470,114 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
         ctx.font = '20px system-ui, -apple-system, Segoe UI, sans-serif';
         ctx.textBaseline = 'middle';
         ctx.fillText(cards[i].v, x+12, y + cardH/2);
+      }
+    });
+  }
+
+  // Figure 7: Before/After (demo)
+  function drawBeforeAfterDemo(canvasId) {
+    const metrics = ARTICLE_DATA?.beforeAfterDemo?.metrics || [];
+    with2d(canvasId, (ctx, w, h) => {
+      ctx.clearRect(0, 0, w, h);
+
+      if (!metrics.length) {
+        ctx.globalAlpha = 0.85;
+        ctx.font = '14px system-ui, -apple-system, Segoe UI, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('Before/Afterデータ（ダミー）が未設定です', w/2, h/2);
+        ctx.globalAlpha = 1;
+        return;
+      }
+
+      const pad = 26;
+      const innerW = w - pad*2;
+      const innerH = h - pad*2;
+
+      // legend
+      ctx.font = '12px system-ui, -apple-system, Segoe UI, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.globalAlpha = 0.72;
+      ctx.fillText('Before（導入前） / After（導入後）  ※数値は提出用ダミー', pad, 8);
+      ctx.globalAlpha = 1;
+
+      // layout: each metric row has two bars
+      const rows = metrics.slice(0, 4);
+      const rowGap = 16;
+      const barH = Math.max(14, Math.min(22, Math.floor((innerH - (rows.length-1)*rowGap) / (rows.length*2))));
+      const maxVal = Math.max(1, ...rows.flatMap(r => [Number(r.before)||0, Number(r.after)||0]));
+      let y = pad + 28;
+
+      for (const r of rows) {
+        const before = Number(r.before)||0;
+        const after = Number(r.after)||0;
+
+        // title
+        ctx.fillStyle = 'rgba(50,25,95,.95)';
+        ctx.font = '12px system-ui, -apple-system, Segoe UI, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(`${r.key} (${r.unit})`, pad, y - 6);
+
+        // bars
+        const bw1 = innerW * (before / maxVal);
+        const bw2 = innerW * (after / maxVal);
+
+        // before bar (softer)
+        {
+          const grad = ctx.createLinearGradient(pad, y, pad + bw1, y);
+          grad.addColorStop(0, 'rgba(210,180,255,.40)');
+          grad.addColorStop(1, 'rgba(140,90,210,.10)');
+          ctx.fillStyle = grad;
+          roundRect(ctx, pad, y, bw1, barH, 10);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(170,130,255,.22)';
+          ctx.lineWidth = 1;
+          roundRect(ctx, pad, y, bw1, barH, 10);
+          ctx.stroke();
+        }
+
+        // label
+        ctx.font = '11px system-ui, -apple-system, Segoe UI, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(60,40,110,.80)';
+        ctx.fillText(`Before ${before}`, pad + 8, y + barH/2);
+
+        // after bar (stronger)
+        {
+          const y2 = y + barH + 6;
+          const grad = ctx.createLinearGradient(pad, y2, pad + bw2, y2);
+          grad.addColorStop(0, 'rgba(180,140,255,.62)');
+          grad.addColorStop(1, 'rgba(120,80,200,.16)');
+          ctx.fillStyle = grad;
+          roundRect(ctx, pad, y2, bw2, barH, 10);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(160,120,255,.28)';
+          ctx.lineWidth = 1;
+          roundRect(ctx, pad, y2, bw2, barH, 10);
+          ctx.stroke();
+
+          ctx.font = '11px system-ui, -apple-system, Segoe UI, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = 'rgba(60,40,110,.90)';
+          ctx.fillText(`After  ${after}`, pad + 8, y2 + barH/2);
+        }
+
+        // hint
+        if (r.hint) {
+          ctx.globalAlpha = 0.72;
+          ctx.font = '11px system-ui, -apple-system, Segoe UI, sans-serif';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'bottom';
+          ctx.fillStyle = 'rgba(60,40,110,.75)';
+          ctx.fillText(String(r.hint), w - pad, y + barH*2 + 10);
+          ctx.globalAlpha = 1;
+        }
+
+        y += (barH*2 + 6 + rowGap);
       }
     });
   }

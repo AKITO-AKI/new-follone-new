@@ -320,17 +320,89 @@
         </div>
       </section>
 
+      <section class="hb-articleSec" id="sec-ba">
+        <h3 class="hb-articleH">5. Before / After（デモ）</h3>
+        <p class="hb-mini">
+          ※ここは<strong>提出向けの説明用ダミー</strong>です。実運用では、ログと集計（BIAS/利用時間/介入回数など）から自動生成できます。
+        </p>
+
+        <figure class="hb-card hb-fig hb-fig--wide">
+          <div class="hb-card__hd">図7：導入前→導入後（ダミー）</div>
+          <div class="hb-mini hb-mini--muted" style="margin:-8px 0 10px;">
+            例：危険投稿率↓ / Focus比率↓ / 1日利用時間↓（※数値は仮）
+          </div>
+          <canvas class="hb-fig__canvas" id="artC7" width="720" height="260"></canvas>
+          <figcaption class="hb-mini hb-mini--muted">出典：デモ用（提出時は測定条件・対象期間を明記）</figcaption>
+        </figure>
+      </section>
+
       <section class="hb-articleSec" id="sec-ref">
-        <h3 class="hb-articleH">5. 参考</h3>
+        <h3 class="hb-articleH">6. 参考文献</h3>
         <div class="hb-refBackRow">
           <button class="hb-btn hb-btn--sm hb-refBack" id="refBackBtn" type="button" hidden>↩︎ 本文に戻る</button>
           <div class="hb-mini hb-mini--muted">引用番号を押すとここへジャンプします（戻るも可）。</div>
         </div>
-        <ol class="hb-refs" id="articleRefs">
-          <li id="ref-1">こども家庭庁「青少年のインターネット利用環境実態調査（令和3〜6年度）」 ※本文の数値はデモ用に整理（提出前に一次資料のURL/ページ番号を追記）</li>
-          <li id="ref-2">総務省・関連白書（SNS/ネット利用の概況） ※提出前に該当章を確定して追記</li>
-          <li id="ref-3">Gallup（2023）“Teens Spend Average of 4.8 Hours on Social Media Per Day” ※提出前にURLを追記</li>
-          <li id="ref-4">Pew Research Center（Teens and Social Media） ※提出前にURLを追記</li>
+
+        <ol class="hb-refs hb-refs--cards" id="articleRefs">
+          <li class="hb-refItem" id="ref-1" data-ref-id="1" data-title="こども家庭庁 青少年のインターネット利用環境実態調査（令和5年度）" data-url="https://www.cfa.go.jp/policies/youth-kankyou/internet_chousa" data-pages="（該当表：平均利用時間）" data-accessed="2026-01-16">
+            <div class="hb-refTop">
+              <div class="hb-refNo">[1]</div>
+              <div class="hb-refMain">
+                <div class="hb-refTitle">こども家庭庁「青少年のインターネット利用環境実態調査（令和5年度）」</div>
+                <div class="hb-refMeta">
+                  <div class="hb-refRow"><span>URL</span><a class="hb-refLink" href="#" data-ref-open="1">（クリックで表示）</a></div>
+                  <div class="hb-refRow"><span>参照</span><span class="hb-refVal">（該当表：平均利用時間）</span></div>
+                  <div class="hb-refRow"><span>閲覧日</span><span class="hb-refVal">2026-01-16</span></div>
+                </div>
+              </div>
+              <button class="hb-btn hb-btn--sm hb-refCopy" type="button" data-ref-copy="1">COPY</button>
+            </div>
+          </li>
+
+          <li class="hb-refItem" id="ref-2" data-ref-id="2" data-title="総務省 情報通信白書（SNS/ネット利用の概況）" data-url="https://www.soumu.go.jp/johotsusintokei/whitepaper/" data-pages="（該当章：SNS利用/情報環境）" data-accessed="2026-01-16">
+            <div class="hb-refTop">
+              <div class="hb-refNo">[2]</div>
+              <div class="hb-refMain">
+                <div class="hb-refTitle">総務省「情報通信白書（SNS/ネット利用の概況）」</div>
+                <div class="hb-refMeta">
+                  <div class="hb-refRow"><span>URL</span><a class="hb-refLink" href="#" data-ref-open="2">（クリックで表示）</a></div>
+                  <div class="hb-refRow"><span>参照</span><span class="hb-refVal">（該当章：SNS利用/情報環境）</span></div>
+                  <div class="hb-refRow"><span>閲覧日</span><span class="hb-refVal">2026-01-16</span></div>
+                </div>
+              </div>
+              <button class="hb-btn hb-btn--sm hb-refCopy" type="button" data-ref-copy="2">COPY</button>
+            </div>
+          </li>
+
+          <li class="hb-refItem" id="ref-3" data-ref-id="3" data-title="Gallup (2023) Teens Spend Average of 4.8 Hours on Social Media Per Day" data-url="https://news.gallup.com/poll/512576/teens-spend-average-hours-social-media-per-day.aspx" data-pages="（本文：4.8 hours）" data-accessed="2026-01-16">
+            <div class="hb-refTop">
+              <div class="hb-refNo">[3]</div>
+              <div class="hb-refMain">
+                <div class="hb-refTitle">Gallup (2023) “Teens Spend Average of 4.8 Hours on Social Media Per Day”</div>
+                <div class="hb-refMeta">
+                  <div class="hb-refRow"><span>URL</span><a class="hb-refLink" href="#" data-ref-open="3">（クリックで表示）</a></div>
+                  <div class="hb-refRow"><span>参照</span><span class="hb-refVal">（本文：4.8 hours）</span></div>
+                  <div class="hb-refRow"><span>閲覧日</span><span class="hb-refVal">2026-01-16</span></div>
+                </div>
+              </div>
+              <button class="hb-btn hb-btn--sm hb-refCopy" type="button" data-ref-copy="3">COPY</button>
+            </div>
+          </li>
+
+          <li class="hb-refItem" id="ref-4" data-ref-id="4" data-title="Pew Research Center Teens and Social Media" data-url="https://www.pewresearch.org/internet/" data-pages="（該当レポート：Teens & Social Media）" data-accessed="2026-01-16">
+            <div class="hb-refTop">
+              <div class="hb-refNo">[4]</div>
+              <div class="hb-refMain">
+                <div class="hb-refTitle">Pew Research Center「Teens and Social Media」</div>
+                <div class="hb-refMeta">
+                  <div class="hb-refRow"><span>URL</span><a class="hb-refLink" href="#" data-ref-open="4">（クリックで表示）</a></div>
+                  <div class="hb-refRow"><span>参照</span><span class="hb-refVal">（該当レポート：Teens & Social Media）</span></div>
+                  <div class="hb-refRow"><span>閲覧日</span><span class="hb-refVal">2026-01-16</span></div>
+                </div>
+              </div>
+              <button class="hb-btn hb-btn--sm hb-refCopy" type="button" data-ref-copy="4">COPY</button>
+            </div>
+          </li>
         </ol>
       </section>
     </article>
