@@ -192,6 +192,31 @@
       </ul>
     </div>
 
+    <div class="hb-card hb-card--wide" id="panelNotStored">
+      <div class="hb-card__hd">NEVER STORED (POLICY)</div>
+      <div class="hb-mini">
+        CanSeeは、説明可能性と安全性のために、<b>個人情報や投稿本文そのもの</b>を保存しない方針です。
+        ここに書かれた項目は、ローカルにも残しません。
+      </div>
+      <ul class="hb-list" style="margin-top:10px">
+        <li class="hb-li"><div class="hb-li__label">投稿本文（全文）</div><div class="hb-mini">保存しない。必要なら要約/カテゴリ集計に置換。</div></li>
+        <li class="hb-li"><div class="hb-li__label">ユーザー名・ユーザーID</div><div class="hb-mini">保存しない。個人の特定につながる情報を避ける。</div></li>
+        <li class="hb-li"><div class="hb-li__label">プロフィール情報</div><div class="hb-mini">保存しない。年齢/所属などの推定につながるため。</div></li>
+        <li class="hb-li"><div class="hb-li__label">フォロー/フォロワー関係</div><div class="hb-mini">保存しない。ネットワーク情報は扱わない。</div></li>
+        <li class="hb-li"><div class="hb-li__label">位置情報・端末識別情報</div><div class="hb-mini">保存しない。不要な追跡をしない。</div></li>
+        <li class="hb-li"><div class="hb-li__label">外部サーバーへの送信データ</div><div class="hb-mini">送信しない（ローカルのみ）。</div></li>
+      </ul>
+      <div class="hb-row hb-row--wrap" style="margin-top:10px">
+        <button class="hb-btn hb-btn--pri" id="btnCopyPolicy" type="button">COPY POLICY</button>
+      </div>
+    </div>
+
+    <div class="hb-card hb-card--wide" id="panelScopeMap">
+      <div class="hb-card__hd">DATA SCOPE MAP</div>
+      <div class="hb-mini hb-mini--muted">保存されるのは「集計値」だけ。投稿本文は保存しません。</div>
+      <canvas id="scopeCanvas" width="900" height="260" class="hb-scopeCanvas" aria-label="data scope map"></canvas>
+    </div>
+
     <div class="hb-card">
       <div class="hb-card__hd">SAVED KEYS</div>
       <div class="hb-mini hb-mini--muted">ローカルストレージ内の主要キーとサイズの目安</div>
@@ -204,13 +229,15 @@
     <div class="hb-card">
       <div class="hb-card__hd">EXPORT / CLEAR</div>
       <div class="hb-row hb-row--wrap">
-        <button class="hb-btn hb-btn--pri" id="btnLogCopy">COPY REPORT</button>
-        <button class="hb-btn" id="btnLogDownload">DOWNLOAD JSON</button>
-        <button class="hb-btn" id="btnRefreshLog">REFRESH</button>
-        <button class="hb-btn hb-btn--danger" id="btnClearLogs">CLEAR LOGS</button>
+        <button class="hb-btn hb-btn--pri" id="btnLogCopy" type="button">COPY REPORT</button>
+        <button class="hb-btn" id="btnLogDownload" type="button">DOWNLOAD REPORT</button>
+        <button class="hb-btn" id="btnLogDownloadAll" type="button">DOWNLOAD ALL</button>
+        <button class="hb-btn" id="btnRefreshLog" type="button">REFRESH</button>
+        <button class="hb-btn hb-btn--danger" id="btnClearLogs" type="button">CLEAR LOGS</button>
+        <button class="hb-btn hb-btn--danger" id="btnClearAllData" type="button">CLEAR ALL DATA</button>
       </div>
       <div class="hb-mini hb-mini--muted" style="margin-top:8px">
-        COPY/DOWNLOADは、<b>投稿本文を含めず</b>、状態・集計・設定・直近ログだけをまとめたデバッグレポートです。
+        REPORTは、<b>投稿本文を含めず</b>、状態・集計・設定・直近ログだけをまとめたデバッグレポートです。ALLは、許可された主要キーをまとめてエクスポートします。
       </div>
       <pre class="hb-code" id="logReport" aria-label="debug report">--</pre>
     </div>
@@ -340,8 +367,32 @@
         </figure>
       </section>
 
+
+
+      <section class="hb-articleSec" id="sec-datahub">
+        <h3 class="hb-articleH">6. データの透明性（保存内容の確認）</h3>
+        <p class="hb-mini">
+          CanSeeは、分析や可視化に必要なデータを <b>端末内（chrome.storage.local）</b> に保存します。
+          ここでは「何が、どれくらい保存されているか」を確認できます（送信はしません）。
+        </p>
+
+        <div class="hb-card hb-dataHub">
+          <div class="hb-card__hd">LOCAL DATA</div>
+          <div class="hb-mini hb-mini--muted" id="dataMsg">読み込み中…</div>
+          <div class="hb-dataGrid" id="dataGrid" aria-label="保存データ一覧"></div>
+
+          <div class="hb-row hb-row--wrap" style="margin-top:10px">
+            <button class="hb-btn hb-btn--pri" id="btnExportAll" type="button">EXPORT（JSON）</button>
+            <button class="hb-btn" id="btnRefreshData" type="button">REFRESH</button>
+            <button class="hb-btn hb-btn--danger" id="btnClearData" type="button">DELETE（ローカル）</button>
+          </div>
+          <div class="hb-mini hb-mini--muted" style="margin-top:6px">
+            ※DELETEは「端末内の保存データ」を消します。拡張機能自体は消えません。
+          </div>
+        </div>
+      </section>
       <section class="hb-articleSec" id="sec-ref">
-        <h3 class="hb-articleH">6. 参考文献</h3>
+        <h3 class="hb-articleH">7. 参考文献</h3>
         <div class="hb-refBackRow">
           <button class="hb-btn hb-btn--sm hb-refBack" id="refBackBtn" type="button" hidden>↩︎ 本文に戻る</button>
           <div class="hb-mini hb-mini--muted">引用番号を押すとここへジャンプします（戻るも可）。</div>

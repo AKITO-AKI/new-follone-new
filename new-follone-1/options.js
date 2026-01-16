@@ -3786,9 +3786,11 @@ if (dom.selHead || dom.selFx) {
     bindNav();
     bindGlanceAndHelp();
     normalizeTooltips();
+    bindTransparencyPanel();
     bindAccessory();
     bindInventoryButtons();
     bindCommandBar();
+    bindTransparencyPanel();
     setView('home');
     if (dom.nextAction) dom.nextAction.classList.add('is-pulse');
 
@@ -4062,6 +4064,375 @@ function csRenderQueueSnapshot(){
     if (!s){ pre.textContent = '（未取得：Xを開いて稼働させてね）'; return; }
     pre.textContent = JSON.stringify(s, null, 2);
   });
+}
+
+
+
+// ------------------------------------------------------------
+// Phase13: LOGS & TRANSPARENCY panel (export / clear / key list)
+// ------------------------------------------------------------
+const LOG_ALLOW_KEYS = [
+  // Aggregations / metrics
+  'follone_biasAgg_v2','follone_usage_v1','follone_riskAgg_v1',
+  // Progress / game
+  'follone_level','follone_xp','follone_quest','follone_ownedHead','follone_ownedFx','follone_equippedHead','follone_equippedFx',
+  // Settings / feature flags
+  'follone_settings','follone_flags','follone_enabled','follone_master_analyze','follone_master_display','follone_master_intervene',
+  'follone_safeFilterEnabled','follone_softWarningEnabled','follone_notifyEnabled','follone_xThemeEnabled',
+  'follone_dailyLimitEnabled','follone_dailyLimitMin','follone_dailyWarnBeforeMin',
+  'follone_sensitivity','follone_spotlightStrength','follone_characterId','follone_uiMode','follone_ui_minimized','follone_ui_schoolMode',
+  // Transparency / logs (lightweight)
+  'follone_lightLog_v1','cansee_queueSnapshot',
+  // Onboarding
+  'follone_onboarding_done','follone_onboarding_state','follone_onboarding_phase'
+];
+
+const LOG_CLEAR_LOG_KEYS = [
+  'follone_lightLog_v1',
+  'cansee_queueSnapshot'
+];
+
+const LOG_CLEAR_ALL_KEYS = [
+  ...LOG_ALLOW_KEYS,
+  // caches (if present)
+  'follone_resultCache_v1','follone_resultCache_v2'
+];
+
+const bytesToHuman = (b) => {
+  const n = Number(b)||0;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024*1024) return `${(n/1024).toFixed(1)} KB`;
+  return `${(n/(1024*1024)).toFixed(2)} MB`;
+};
+
+const safeJson = (v) => {
+  try { return JSON.stringify(v, null, 2); } catch { return 'null'; }
+};
+
+const approxBytes = (v) => {
+  try { return new TextEncoder().encode(JSON.stringify(v)).length; } catch { return 0; }
+};
+
+const dlJson = (obj, filename) => {
+  const txt = safeJson(obj);
+  const blob = new Blob([txt], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+};
+
+async function loadLocalForLog() {
+  return await new Promise((resolve) => {
+    chrome.storage.local.get(null, (all) => {
+      const out = {};
+      for (const k of LOG_ALLOW_KEYS) if (k in all) out[k] = all[k];
+      resolve(out);
+    });
+  });
+}
+
+function buildLogReport(data) {
+  const now = new Date();
+  const version = (chrome?.runtime?.getManifest && chrome.runtime.getManifest().version) || 'unknown';
+
+  const keys = Object.keys(data);
+  const keyRows = keys.map((k) => ({
+    key: k,
+    type: Array.isArray(data[k]) ? 'array' : (data[k] === null ? 'null' : typeof data[k]),
+    bytes: approxBytes(data[k])
+  }));
+
+  const totalBytes = keyRows.reduce((a, r) => a + (r.bytes||0), 0);
+
+  return {
+    generatedAt: now.toISOString(),
+    version,
+    note: 'This report is local-only. It contains settings/aggregations and lightweight logs. It should not include raw post texts by design.',
+    summary: {
+      keys: keys.length,
+      approxBytes: totalBytes
+    },
+    keys: keyRows,
+    data
+  };
+}
+
+function renderLogKeysTable(data) {
+  const tbl = $('#logKeys');
+  const sum = $('#logSummary');
+  if (!tbl || !sum) return;
+
+  const keys = Object.keys(data);
+  if (!keys.length) {
+    sum.textContent = '（保存データがまだありません）';
+    tbl.innerHTML = '';
+    return;
+  }
+
+  const rows = keys
+    .map((k) => ({ k, v: data[k], bytes: approxBytes(data[k]) }))
+    .sort((a, b) => b.bytes - a.bytes);
+
+  const total = rows.reduce((a, r) => a + r.bytes, 0);
+  sum.textContent = `${keys.length} keys / ~${bytesToHuman(total)}`;
+
+  const head = `
+    <tr>
+      <th style="text-align:left">key</th>
+      <th>type</th>
+      <th style="text-align:right">size</th>
+    </tr>`;
+
+  const body = rows.map((r) => {
+    const t = Array.isArray(r.v) ? 'array' : (r.v === null ? 'null' : typeof r.v);
+    return `
+      <tr>
+        <td style="text-align:left; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">${r.k}</td>
+        <td style="text-align:center">${t}</td>
+        <td style="text-align:right">${bytesToHuman(r.bytes)}</td>
+      </tr>`;
+  }).join('');
+
+  tbl.innerHTML = head + body;
+}
+
+function renderRecentActivity(data) {
+  const list = $('#logList');
+  const empty = $('#logEmpty');
+  if (!list || !empty) return;
+
+  const light = data.follone_lightLog_v1;
+  const items = (light && Array.isArray(light.items)) ? light.items.slice(-10).reverse() : [];
+
+  list.innerHTML = '';
+  if (!items.length) {
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  for (const it of items) {
+    const li = document.createElement('li');
+    li.className = 'hb-li hb-li--log';
+    const when = it.t ? new Date(it.t).toLocaleString() : '--';
+    const kind = it.kind || 'event';
+    const msg = it.msg || '';
+    li.innerHTML = `<div class="hb-li__label">${kind}</div><div class="hb-mini">${when} / ${msg}</div>`;
+    list.appendChild(li);
+  }
+
+  // today tags (best-effort)
+  const tagA = $('#tagTodayAnalyze');
+  const tagS = $('#tagTodaySpot');
+  const tagX = $('#tagTodayXp');
+  if (tagA) tagA.textContent = `analyzed: ${(light && light.today && light.today.analyzed) || 0}`;
+  if (tagS) tagS.textContent = `spotlight: ${(light && light.today && light.today.spotlight) || 0}`;
+  if (tagX) tagX.textContent = `xp: ${(light && light.today && light.today.xp) || 0}`;
+}
+
+// Sprint4-2: Transparency policy + data scope map
+function buildPrivacyPolicyText() {
+  return [
+    'CanSee / Data & Privacy',
+    '保存しない（Never stored）:',
+    '- 投稿本文（全文）',
+    '- ユーザー名 / ユーザーID / プロフィール',
+    '- フォロー/フォロワー関係',
+    '- 位置情報・端末識別情報',
+    '外部送信:',
+    '- しません（ローカルのみ）',
+  ].join('\n');
+}
+
+function drawScopeMap() {
+  const c = document.getElementById('scopeCanvas');
+  if (!c || !c.getContext) return;
+  const ctx = c.getContext('2d');
+  const w = c.width, h = c.height;
+  ctx.clearRect(0,0,w,h);
+
+  // background
+  ctx.fillStyle = 'rgba(255,255,255,0.0)';
+  ctx.fillRect(0,0,w,h);
+
+  const box = (x,y,bw,bh, title, sub) => {
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.strokeStyle = 'rgba(160,120,200,0.35)';
+    ctx.lineWidth = 2;
+    roundRect(ctx,x,y,bw,bh,18,true,true);
+    ctx.fillStyle = 'rgba(70,40,90,0.95)';
+    ctx.font = '700 18px system-ui, -apple-system, Segoe UI, sans-serif';
+    ctx.fillText(title, x+18, y+32);
+    ctx.fillStyle = 'rgba(70,40,90,0.75)';
+    ctx.font = '14px system-ui, -apple-system, Segoe UI, sans-serif';
+    wrapText(ctx, sub, x+18, y+58, bw-36, 18);
+  };
+
+  // helper arrows
+  const arrow = (x1,y1,x2,y2) => {
+    ctx.strokeStyle = 'rgba(130,80,170,0.55)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    const ang = Math.atan2(y2-y1, x2-x1);
+    const ah = 10;
+    ctx.beginPath();
+    ctx.moveTo(x2,y2);
+    ctx.lineTo(x2-ah*Math.cos(ang-0.5), y2-ah*Math.sin(ang-0.5));
+    ctx.lineTo(x2-ah*Math.cos(ang+0.5), y2-ah*Math.sin(ang+0.5));
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(130,80,170,0.55)';
+    ctx.fill();
+  };
+
+  // boxes
+  box(30, 60, 240, 140, 'X 投稿', 'その場で解析（短命）\n本文は保存しない');
+  box(330, 40, 250, 180, '分類 / 状態', 'queued→processing→done\n結果は集計へ');
+  box(640, 60, 230, 140, '保存されるのは集計値', 'biasAgg / riskAgg / usage\n（ローカルのみ）');
+
+  arrow(270, 130, 330, 130);
+  arrow(580, 130, 640, 130);
+
+  ctx.fillStyle = 'rgba(70,40,90,0.65)';
+  ctx.font = '12px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.fillText('On-device only / No external transfer', 30, 26);
+}
+
+function bindTransparencyPanel() {
+  const btn = document.getElementById('btnCopyPolicy');
+  if (btn) {
+    btn.addEventListener('click', async () => {
+      const txt = buildPrivacyPolicyText();
+      try {
+        await navigator.clipboard.writeText(txt);
+        alert('ポリシー文をコピーしたよ');
+      } catch {
+        alert('コピーできなかった…（ブラウザ設定の可能性）');
+      }
+    });
+  }
+  // Draw once now, and again on resize (best-effort)
+  drawScopeMap();
+  window.addEventListener('resize', () => {
+    // keep crisp: do not scale canvas, just redraw
+    drawScopeMap();
+  });
+}
+
+function roundRect(ctx, x, y, w, h, r, fill, stroke) {
+  const rr = Math.min(r, w/2, h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+rr, y);
+  ctx.arcTo(x+w, y, x+w, y+h, rr);
+  ctx.arcTo(x+w, y+h, x, y+h, rr);
+  ctx.arcTo(x, y+h, x, y, rr);
+  ctx.arcTo(x, y, x+w, y, rr);
+  ctx.closePath();
+  if (fill) ctx.fill();
+  if (stroke) ctx.stroke();
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const lines = String(text).split('\n');
+  let yy = y;
+  for (const ln of lines) {
+    const words = ln.split(' ');
+    let line = '';
+    for (const w of words) {
+      const test = line ? (line + ' ' + w) : w;
+      if (ctx.measureText(test).width > maxWidth && line) {
+        ctx.fillText(line, x, yy);
+        line = w;
+        yy += lineHeight;
+      } else {
+        line = test;
+      }
+    }
+    ctx.fillText(line, x, yy);
+    yy += lineHeight;
+  }
+}
+
+
+async function refreshLogPanel() {
+  const data = await loadLocalForLog();
+  const report = buildLogReport(data);
+
+  renderLogKeysTable(data);
+  renderRecentActivity(data);
+
+  const pre = $('#logReport');
+  if (pre) pre.textContent = safeJson(report);
+}
+
+function initLogPanel() {
+  const copyBtn = $('#btnLogCopy');
+  const dlBtn = $('#btnLogDownload');
+  const dlAllBtn = $('#btnLogDownloadAll');
+  const refBtn = $('#btnRefreshLog');
+  const clearBtn = $('#btnClearLogs');
+  const clearAllBtn = $('#btnClearAllData');
+
+  if (refBtn) refBtn.addEventListener('click', refreshLogPanel);
+
+  if (copyBtn) copyBtn.addEventListener('click', async () => {
+    const pre = $('#logReport');
+    const txt = pre ? (pre.textContent || '') : '';
+    try {
+      await navigator.clipboard.writeText(txt);
+      alert('レポートをコピーしたよ');
+    } catch {
+      alert('コピーできなかった…（ブラウザ設定の可能性）');
+    }
+  });
+
+  if (dlBtn) dlBtn.addEventListener('click', async () => {
+    const data = await loadLocalForLog();
+    const report = buildLogReport(data);
+    dlJson(report, `cansee_report_${isoDate()}.json`);
+  });
+
+  if (dlAllBtn) dlAllBtn.addEventListener('click', async () => {
+    const all = await new Promise((resolve) => chrome.storage.local.get(null, resolve));
+    // Safety: export only allowlisted keys by default.
+    const out = {};
+    for (const k of LOG_CLEAR_ALL_KEYS) if (k in all) out[k] = all[k];
+    dlJson({
+      generatedAt: new Date().toISOString(),
+      version: (chrome?.runtime?.getManifest && chrome.runtime.getManifest().version) || 'unknown',
+      note: 'Exported allowlisted keys only (privacy-safe default).',
+      data: out
+    }, `cansee_export_${isoDate()}.json`);
+  });
+
+  if (clearBtn) clearBtn.addEventListener('click', async () => {
+    if (!confirm('ログ（軽量ログ/キューのスナップショット）を消去します。OK？')) return;
+    await new Promise((resolve) => chrome.storage.local.remove(LOG_CLEAR_LOG_KEYS, resolve));
+    alert('ログを消去しました');
+    refreshLogPanel();
+  });
+
+  if (clearAllBtn) clearAllBtn.addEventListener('click', async () => {
+    if (!confirm('すべての保存データ（進捗/集計/設定も含む）を初期化します。OK？')) return;
+    await new Promise((resolve) => chrome.storage.local.remove(LOG_CLEAR_ALL_KEYS, resolve));
+    alert('保存データを初期化しました');
+    refreshLogPanel();
+  });
+
+  // Live update
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    const touched = Object.keys(changes);
+    if (touched.some((k) => LOG_ALLOW_KEYS.includes(k))) refreshLogPanel();
+  });
+
+  refreshLogPanel();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
