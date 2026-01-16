@@ -157,6 +157,8 @@
       if (!bb) {
         bb = document.createElement("div");
         bb.className = "cansee-post-chip";
+        bb.dataset.cansee = "chip";
+        bb.dataset.canseeKind = "status";
         bb.style.pointerEvents = "none";
         // Ensure positioning context
         const st = getComputedStyle(host);
@@ -307,6 +309,8 @@
     pauseEpoch: 0,
     observers: null,
     inactiveTickId: 0,
+    activityPingId: 0,
+    lastActivityPingTs: Date.now(),
     discoveryTimerId: 0,
     analyzeTimerId: 0,
     onUserActivity: null,
@@ -2230,6 +2234,10 @@ function installSearchLoaderHook() {
       try { window.removeEventListener("pointerdown", state.onUserActivity, { passive: true }); } catch (_) {}
       state.listenersAttached = false;
     }
+
+    // Stop activity ping (daily usage time)
+    try { if (state.activityPingId) clearInterval(state.activityPingId); } catch (_) {}
+    state.activityPingId = 0;
   }
 
   function connectObservers() {
@@ -2258,6 +2266,32 @@ function installSearchLoaderHook() {
         if (state.runtimePaused) return;
         maybeSuggestInactiveReport();
       }, 2000);
+    }
+
+    // Phase4: activity ping -> SW daily limit judge
+    if (!state.activityPingId) {
+      state.lastActivityPingTs = Date.now();
+      state.activityPingId = setInterval(() => {
+        try {
+          if (state.runtimePaused) return;
+          const now = Date.now();
+          const dt = Math.max(0, now - (state.lastActivityPingTs || now));
+          state.lastActivityPingTs = now;
+
+          // Count only when user did something recently
+          const active = (now - (state.lastUserActivityTs || 0)) <= 15000;
+          const activeMs = active ? Math.min(10000, dt) : 0;
+
+          chrome.runtime.sendMessage({ type: 'FOLLONE_ACTIVITY_PING', activeMs }, (resp) => {
+            try {
+              const le = chrome.runtime.lastError;
+              if (le) return;
+              if (!resp || !resp.ok) return;
+              maybeShowUsageToast(resp);
+            } catch (_e) {}
+          });
+        } catch (_e) {}
+      }, 10000);
     }
   }
 
@@ -3416,6 +3450,70 @@ const dt = Math.round(performance.now() - t0);
     window.setTimeout(() => { if (toast && toast.isConnected) toast.remove(); }, 12000);
   }
 
+  // Phase4: Daily usage limit warning (best-effort)
+  async function maybeShowUsageToast(resp) {
+    try {
+      if (!resp || !resp.ok) return;
+      const level = String(resp.warnLevel || 'none');
+      if (level !== 'near' && level !== 'over') return;
+
+      const snooze = await chrome.storage.local.get(['cansee_usageSnoozeUntil']);
+      const until = Number(snooze.cansee_usageSnoozeUntil || 0);
+      if (until && Date.now() < until) return;
+
+      const host = document.body || document.documentElement;
+      if (!host) return;
+
+      const old = document.getElementById('cansee-usage-toast');
+      if (old) old.remove();
+
+      const usedMin = Math.round(Number(resp.usedMin || 0));
+      const limitMin = Math.round(Number(resp.limitMin || 0));
+      const remainMin = Math.max(0, Math.round(Number(resp.remainingMin || 0)));
+
+      const toast = document.createElement('div');
+      toast.id = 'cansee-usage-toast';
+      toast.className = 'follone-toast';
+      toast.dataset.cansee = 'usage';
+      const title = (level === 'over') ? '利用時間オーバー' : '利用時間がそろそろ';
+      const line = (level === 'over')
+        ? `今日の上限（${limitMin}分）を超えたよ。` 
+        : `残り ${remainMin}分（上限 ${limitMin}分 / 使用 ${usedMin}分）`;
+      toast.innerHTML = `
+        <div class="ft-head">
+          <div class="ft-title">${escapeHtml(title)}</div>
+          <button class="ft-close" type="button" aria-label="close">×</button>
+        </div>
+        <div class="ft-body">
+          <div class="ft-line">${escapeHtml(line)}</div>
+          <div class="ft-sub">少し休憩すると、集中力が戻りやすいよ。</div>
+          <div class="ft-btns">
+            <button class="ft-btn" type="button" data-act="snooze">10分スヌーズ</button>
+            <button class="ft-btn" type="button" data-act="settings">設定を開く</button>
+          </div>
+        </div>
+      `;
+      host.appendChild(toast);
+
+      const close = () => { try { toast.remove(); } catch (_) {} };
+      toast.querySelector('.ft-close')?.addEventListener('click', close);
+      toast.querySelector('button[data-act="snooze"]')?.addEventListener('click', async () => {
+        try {
+          await chrome.storage.local.set({ cansee_usageSnoozeUntil: Date.now() + 10 * 60 * 1000 });
+        } catch (_) {}
+        close();
+      });
+      toast.querySelector('button[data-act="settings"]')?.addEventListener('click', async () => {
+        try {
+          chrome.runtime.sendMessage({ type: 'FOLLONE_OPEN_OPTIONS' }, () => {});
+        } catch (_) {}
+        close();
+      });
+
+      window.setTimeout(() => { if (toast && toast.isConnected) toast.remove(); }, 12000);
+    } catch (_e) {}
+  }
+
 // -----------------------------
   // Interventions
   // -----------------------------
@@ -3633,6 +3731,24 @@ function markQueueStatus(id, status, extra){
     // cap memory
     if (state.queueDoneTs.length > 2000) state.queueDoneTs = state.queueDoneTs.slice(-1200);
   }
+
+  // Phase: visible per-post status chip (queued/processing/done/failed)
+  try {
+    const elem = state.elemById?.get(id);
+    if (elem) {
+      if (status === "pending") markChip(elem, "queued", "queued");
+      else if (status === "processing") markChip(elem, "processing", "running");
+      else if (status === "done") {
+        markChip(elem, "done", "done");
+        // fade out (avoid "残骸")
+        window.setTimeout(() => {
+          try { markChip(elem, "", "done"); } catch (_) {}
+        }, 1500);
+      }
+      else if (status === "failed") markChip(elem, "failed", "error");
+    }
+  } catch (_e) {}
+
   scheduleQueueSnapshot(0);
 }
 

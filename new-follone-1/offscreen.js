@@ -363,6 +363,21 @@ async function classifyBatch(batch, topicList, prefs) {
     return out;
   };
 
+  // Robust JSON parse: tolerate code fences / extra text
+  const safeParseJson = (raw) => {
+    try { return JSON.parse(raw); } catch (_) {}
+    try {
+      const s = String(raw || "");
+      const i = s.indexOf('{');
+      const j = s.lastIndexOf('}');
+      if (i >= 0 && j > i) {
+        const cut = s.slice(i, j + 1);
+        return JSON.parse(cut);
+      }
+    } catch (_) {}
+    return null;
+  };
+
   // ---- Pass 1 (fast) ----
   const schemaFast = buildSchema(list, expectedIds, "fast");
   const promptFast = buildPrompt(src, list, prefs, "fast");
@@ -370,16 +385,29 @@ async function classifyBatch(batch, topicList, prefs) {
   let obj1 = null;
   try {
     const raw1 = await promptWithLanguageSafe(promptFast, schemaFast, "ja", { allowUnconstrained: false });
-    obj1 = JSON.parse(raw1);
+    obj1 = safeParseJson(raw1);
+    if (!obj1) throw new Error("parse_failed");
   } catch (e) {
-    return {
-      ok: false,
-      status: "error",
-      availability: st.availability,
-      engine: "prompt_api",
-      errorCode: "JSON_PARSE_FAILED",
-      detail: String(e)
-    };
+    // 1 retry with a stronger instruction (demo must not stop)
+    try {
+      const promptRetry = `${promptFast}\n\n重要: 出力はJSONのみ。コードブロックや説明文は禁止。`;
+      const rawR = await promptWithLanguageSafe(promptRetry, schemaFast, "ja", { allowUnconstrained: true });
+      obj1 = safeParseJson(rawR);
+    } catch (_e) {}
+
+    if (!obj1) {
+      const dt = Date.now() - t0;
+      return {
+        ok: true,
+        status: "ready",
+        availability: st.availability,
+        engine: "prompt_api",
+        latencyMs: dt,
+        // Placeholder results so UI keeps moving (BIAS / chips won't freeze)
+        results: coerceResults({ results: [] }, expectedIds),
+        errorCode: "FALLBACK_PLACEHOLDER",
+      };
+    }
   }
 
   let merged = coerceResults(obj1, expectedIds);

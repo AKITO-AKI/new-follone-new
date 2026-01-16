@@ -318,6 +318,11 @@
     btnPrompt: $('#btnPrompt'),
     btnWarmup: $('#btnWarmup'),
 
+    // onboarding / tutorial
+    btnTutorial: $('#btnTutorial'),
+    tutorialState: $('#tutorialState'),
+    btnResetOnboarding: $('#btnReset'),
+
     // next action
     nextText: $('#nextText'),
 
@@ -2625,6 +2630,56 @@ function renderAccessorySelects() {
   }
 
 
+  function bindTutorial() {
+    // Keep this super robust: always open tutorial.html via runtime URL.
+    const updateState = async () => {
+      try {
+        const r = await chrome.storage.local.get(['follone_onboarding_done','follone_onboarding_state','follone_onboarding_phase']);
+        const done = !!r.follone_onboarding_done || r.follone_onboarding_state === 'completed' || r.follone_onboarding_phase === 'done';
+        if (dom.tutorialState) dom.tutorialState.textContent = done ? 'done' : 'not started';
+        if (dom.btnTutorial) dom.btnTutorial.textContent = done ? 'REOPEN' : 'START';
+      } catch (_e) {
+        if (dom.tutorialState) dom.tutorialState.textContent = 'unknown';
+      }
+    };
+
+    if (dom.btnTutorial) dom.btnTutorial.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      try {
+        const url = chrome.runtime.getURL('tutorial.html');
+        await chrome.tabs.create({ url });
+      } catch (err) {
+        console.warn('[options] tutorial open failed', err);
+      }
+    });
+
+    if (dom.btnResetOnboarding) dom.btnResetOnboarding.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const ok = confirm('チュートリアル状態をリセットしますか？');
+      if (!ok) return;
+      try {
+        await chrome.storage.local.set({
+          follone_onboarding_done: false,
+          follone_onboarding_state: 'not_started',
+          follone_onboarding_phase: 'start'
+        });
+        await updateState();
+        speak('リセットしたよ。STARTで再開してね。', (app.data.characterId || 'PET').toUpperCase());
+      } catch (_e) {
+        alert('リセットに失敗した…');
+      }
+    });
+
+    // initial render + keep in sync
+    updateState();
+    try {
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== 'local') return;
+        if (changes.follone_onboarding_done || changes.follone_onboarding_state || changes.follone_onboarding_phase) updateState();
+      });
+    } catch (_e) {}
+  }
+
 function bindAccessory() {
   if (dom.selHead) {
     dom.selHead.addEventListener('change', async () => {
@@ -2833,6 +2888,7 @@ if (dom.selHead || dom.selFx) {
 
     bindNav();
     bindGlanceAndHelp();
+    bindTutorial();
     normalizeTooltips();
     bindAccessory();
     bindInventoryButtons();
