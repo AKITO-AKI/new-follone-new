@@ -285,15 +285,17 @@
     ctx.restore();
 
     // center text (minimal)
+    // NOTE: use darker ink so it stays readable on the pastel glass UI
     ctx.save();
-    ctx.fillStyle = 'rgba(240,240,255,0.92)';
-    ctx.font = '700 22px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+    ctx.fillStyle = 'rgba(58,49,66,0.92)';
+    ctx.font = '800 22px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(`${Math.round(v*100)}%`, cx, cy - 6);
 
-    ctx.globalAlpha = 0.75;
-    ctx.font = '500 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+    ctx.globalAlpha = 0.86;
+    ctx.fillStyle = 'rgba(58,49,66,0.78)';
+    ctx.font = '600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
     if (labelTop) ctx.fillText(labelTop, cx, cy + 18);
     if (labelBottom) ctx.fillText(labelBottom, cx, cy + 34);
     ctx.restore();

@@ -222,6 +222,11 @@
         if (!el.closest('article')) el.remove();
       });
 
+      // orphan post badges (Phase25-C)
+      document.querySelectorAll('.follone-postBadge').forEach((el) => {
+        if (!el.closest('article')) el.remove();
+      });
+
       // orphan injected elements marked by data-cansee
       document.querySelectorAll('[data-cansee]').forEach((el) => {
         const scope = el.getAttribute('data-cansee');
@@ -232,6 +237,40 @@
       ['follone-widget','follone-overlay','follone-spotlight','follone-loader','follone-onboarding','follone-onboarding-nudge'].forEach((id) => {
         const els = document.querySelectorAll(`#${id}`);
         if (els.length > 1) els.forEach((e, i) => { if (i > 0) e.remove(); });
+      });
+
+      // Stale UI roots: if hidden, we can safely remove and recreate later.
+      // This prevents "残骸" after SPA navigation or partial reinjection.
+      const uiKeep = new Set(['follone-widget']);
+      document.querySelectorAll('[id^="follone-"]').forEach((el) => {
+        if (!el || !el.id) return;
+        if (uiKeep.has(el.id)) return;
+
+        // If this UI is currently visible, keep it.
+        const isVisible = (() => {
+          try {
+            const st = getComputedStyle(el);
+            if (st.display === 'none' || st.visibility === 'hidden' || Number(st.opacity || '1') === 0) return false;
+            const r = el.getBoundingClientRect();
+            return (r.width > 2 && r.height > 2);
+          } catch (_) {
+            return false;
+          }
+        })();
+        if (isVisible) return;
+
+        // Keep loader only if it is actively shown.
+        if (el.id === 'follone-loader') {
+          if (el.getAttribute('data-show') === '1') return;
+        }
+
+        // Keep spotlight only if in-use.
+        if (el.id === 'follone-spotlight') {
+          if (el.getAttribute('data-open') === '1') return;
+        }
+
+        // Otherwise, remove if it isn't inside the main widget.
+        if (!el.closest('#follone-widget')) el.remove();
       });
 
       pushEvent('cleanup', { reason: String(reason || '') });
@@ -751,6 +790,8 @@ function showCtxBanner() {
 
       const d = document.createElement("div");
       d.id = "follone-ctx-banner";
+      d.setAttribute('data-cansee', 'ui');
+      d.setAttribute('data-cansee-role', 'ctx-banner');
       d.innerHTML = `
         <div class="ctxCard">
           <div class="ctxTitle">follone が更新されたみたい</div>
@@ -1436,10 +1477,13 @@ function openXSearch(q) {
       const sp = document.getElementById("follone-spotlight");
       if (sp) {
         sp.classList.remove("show");
-    try { setTask(restoreTask); } catch (_) {}
+        sp.setAttribute('data-open', '0');
         sp.onclick = null;
       }
     } catch (_) {}
+
+    // restore task label after closing
+    try { setTask(restoreTask); } catch (_) {}
 
     // Restore widget state (spotlight emphasis)
     try {
@@ -1548,6 +1592,7 @@ function openXSearch(q) {
       sp.setAttribute("data-category", String(cat || ""));
     } catch (_) {}
     sp.classList.add("show");
+    sp.setAttribute('data-open', '1');
     try { setTask("spotlight", "ALRT ケイコク"); } catch (_) {}
 
     // Emphasize widget ticker while spotlight is open (visual state)
@@ -1743,6 +1788,7 @@ function openXSearch(q) {
     if (loader.hideTimer) { clearTimeout(loader.hideTimer); loader.hideTimer = 0; }
 
     el.classList.add("show");
+    el.setAttribute('data-show', '1');
     lockScroll(true, document.querySelector("main") || document.querySelector("[role='main']") || document.body.firstElementChild);
     setLoaderBrand(loader.kind === "boot" ? "CanSee" : "Now analyzing");
     // Stage 0 (logo)
@@ -1818,6 +1864,7 @@ function setLoaderProgress(progress) {
     if (loader.hideTimer) clearTimeout(loader.hideTimer);
     loader.hideTimer = setTimeout(() => {
       el.classList.remove("show");
+      el.setAttribute('data-show', '0');
       lockScroll(false);
       loader.hideTimer = 0;
     }, 260);
@@ -3572,6 +3619,8 @@ const dt = Math.round(performance.now() - t0);
 
     const toast = document.createElement("div");
     toast.id = "follone-toast";
+    toast.setAttribute('data-cansee', 'ui');
+    toast.setAttribute('data-cansee-role', 'toast');
     toast.className = "follone-toast";
     toast.innerHTML = `
       <div class="ft-head">

@@ -5,13 +5,14 @@
 
 #follone-widget{
   /* ---- Tokens (base) ---- */
-  --ui-body-0: #F6F1EA;
-  --ui-body-1: #EFE7DD;
-  --ui-body-2: #E7DDCF;
-  --ui-ink-0: #2A2723;
-  --ui-ink-1: #4A433B;
-  --ui-ink-2: #7A7065;
-  --ui-line: rgba(42,39,35,0.12);
+  /* yume-kawa cream / lavender white */
+  --ui-body-0: #FFFFFF;
+  --ui-body-1: #F7F5FF;
+  --ui-body-2: #F1ECFF;
+  --ui-ink-0: #3A3142;
+  --ui-ink-1: #5A4F66;
+  --ui-ink-2: #7A6D8A;
+  --ui-line: rgba(58,49,66,0.14);
 
   /* Accent (overridden by data-skin) */
   --ui-accent: #7B61FF;
@@ -24,11 +25,12 @@
   --shadow-inset-2: inset 0 -3px 6px rgba(0,0,0,0.12);
   --bevel: inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -1px 0 rgba(0,0,0,0.10);
 
-  /* CRT glass strengths (state overrides in CSS below) */
-  --glass-opacity: 0.36;
-  --glass-reflect: 0.20;
-  --glass-scanline: 0.08;
-  --glass-noise: 0.04;
+  /* Glass strengths (yume-kawa / transparent) */
+  --glass-opacity: 0.42;
+  --glass-reflect: 0.22;
+  /* retro CRT textures are disabled (no scanlines / no dot noise) */
+  --glass-scanline: 0;
+  --glass-noise: 0;
 
   /* Typography (dot-ish) */
   --font-dot-ui: "DotGothic16", "Dot Gothic 16", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
@@ -103,20 +105,24 @@
   inset: 0;
   pointer-events: none;
   opacity: var(--glass-opacity);
+  /* yume-kawa glass: soft bokeh + a tiny sparkle hint (no CRT scanlines) */
   background:
-    radial-gradient(180px 120px at 20% 0%, rgba(255,255,255,var(--glass-reflect)), transparent 65%),
-    radial-gradient(220px 140px at 90% 10%, rgba(255,255,255,calc(var(--glass-reflect) * 0.75)), transparent 70%),
-    repeating-linear-gradient(180deg, rgba(0,0,0,var(--glass-scanline)) 0px, rgba(0,0,0,var(--glass-scanline)) 1px, rgba(0,0,0,0) 3px, rgba(0,0,0,0) 6px);
+    radial-gradient(260px 180px at 18% 6%, rgba(255,255,255,var(--glass-reflect)), transparent 70%),
+    radial-gradient(280px 220px at 92% 8%, rgba(255,255,255,calc(var(--glass-reflect) * 0.85)), transparent 74%),
+    radial-gradient(220px 160px at 35% 92%, rgba(123,97,255,0.10), transparent 72%),
+    radial-gradient(240px 160px at 82% 82%, rgba(253,107,152,0.10), transparent 72%);
 }
 
-/* Noise grain */
+/* Sparkle dust (very subtle) */
 #follone-widget .glassLayer::after{
   content:"";
   position:absolute; inset:0;
+  opacity: 0.18;
   background:
-    radial-gradient(rgba(42,39,35,var(--glass-noise)) 1px, transparent 1px);
-  background-size: 3px 3px;
-  opacity: 0.7;
+    radial-gradient(rgba(255,255,255,0.9) 1px, transparent 2px);
+  background-size: 38px 38px;
+  background-position: 0 0;
+  filter: blur(0.2px);
 }
 
 /* Accent FX */
@@ -359,13 +365,16 @@
   position: relative;
 }
 
-/* dot-matrix substrate */
+/* yume-kawa substrate (no dot-matrix / no CRT) */
 #follone-widget #follone-taskbar.ticker::before{
   content:"";
   position:absolute; inset:0;
-  background: radial-gradient(rgba(42,39,35,0.10) 1px, transparent 1px);
-  background-size: 4px 4px;
-  opacity: 0.55;
+  background:
+    radial-gradient(220px 120px at 18% 18%, rgba(255,255,255,0.65), transparent 70%),
+    radial-gradient(240px 140px at 78% 10%, rgba(255,255,255,0.55), transparent 72%),
+    radial-gradient(200px 120px at 40% 90%, rgba(123,97,255,0.12), transparent 72%),
+    radial-gradient(240px 140px at 88% 78%, rgba(253,107,152,0.12), transparent 74%);
+  opacity: 0.85;
   pointer-events:none;
 }
 
@@ -403,10 +412,10 @@
   color: rgba(42,39,35,0.70);
 }
 
-/* glitch pulse (noise->settle) */
-#follone-widget #follone-taskbar.glitch::before{ opacity: 0.75; filter: contrast(1.2); }
+/* glitch pulse (soft) */
+#follone-widget #follone-taskbar.glitch::before{ opacity: 0.95; filter: saturate(1.02); }
 #follone-widget #follone-taskbar.glitch .tickerTop,
-#follone-widget #follone-taskbar.glitch .tickerBot{ filter: blur(0.25px); transform: translateY(0.1px); }
+#follone-widget #follone-taskbar.glitch .tickerBot{ filter: blur(0.12px); transform: translateY(0.1px); }
 
 /* ---- Actions ---- */
 #follone-widget .actions{ margin-top: 10px; }
@@ -442,19 +451,15 @@
   position: relative;
 }
 
-/* Empty blocks for XP */
+/* Soft hint for XP track (no block grid) */
 #follone-widget .xpBarWrap::before{
   content:"";
   position:absolute;
   inset: 1px;
   border-radius: 6px;
   background:
-    repeating-linear-gradient(90deg,
-      rgba(42,39,35,0.18) 0px,
-      rgba(42,39,35,0.18) 9px,
-      rgba(0,0,0,0) 9px,
-      rgba(0,0,0,0) 12px);
-  opacity: 0.18;
+    linear-gradient(90deg, rgba(255,255,255,0.55), rgba(255,255,255,0.12));
+  opacity: 0.22;
   pointer-events:none;
 }
 
@@ -463,27 +468,16 @@
   width:0%;
   position: relative;
   background:
-    /* block mask */
-    repeating-linear-gradient(90deg,
-      rgba(0,0,0,0) 0px,
-      rgba(0,0,0,0) 9px,
-      rgba(0,0,0,0.18) 9px,
-      rgba(0,0,0,0.18) 12px),
-    /* diagonal stripe fill */
-    repeating-linear-gradient(135deg,
-      rgba(255,255,255,0.22) 0px,
-      rgba(255,255,255,0.22) 6px,
-      rgba(0,0,0,0) 6px,
-      rgba(0,0,0,0) 12px),
+    radial-gradient(220px 20px at 10% 50%, rgba(255,255,255,0.45), transparent 70%),
     linear-gradient(90deg, var(--ui-accent-soft), var(--ui-accent));
-  background-size: 12px 100%, 24px 24px, auto;
-  animation: folloneStripe 1.2s linear infinite;
+  animation: folloneGlowSweep 1.4s var(--ease-out) infinite;
   transition: width var(--t-mid) var(--ease-out);
 }
 
-@keyframes folloneStripe{
-  from{ background-position: 0 0, 0 0, 0 0; }
-  to{ background-position: 0 0, 24px 24px, 0 0; }
+@keyframes folloneGlowSweep{
+  0%{ filter: brightness(1.00); }
+  50%{ filter: brightness(1.07); }
+  100%{ filter: brightness(1.00); }
 }
 
 /* Boot sequence for XP line */
@@ -510,17 +504,17 @@
 #follone-widget .actionBtn:hover{ filter: brightness(1.03); transform: translateY(-1px); }
 #follone-widget .actionBtn:active{ transform: translateY(0px); }
 
-#follone-widget .muted{ margin-top: 8px; color: rgba(42,39,35,0.55); font-size: 11px; }
+#follone-widget .muted{ margin-top: 8px; color: rgba(58,49,66,0.62); font-size: 11px; }
 
 /* hide text-heavy quests on overlay (kept for internal logic) */
 #follone-widget .quests{ display:none; }
 
-/* ---- State tuning ---- */
-#follone-widget[data-state="standby"]{ --glass-scanline: 0.03; --glass-noise: 0.01; }
-#follone-widget[data-state="collecting"]{ --glass-scanline: 0.06; --glass-noise: 0.03; }
-#follone-widget[data-state="classifying"]{ --glass-scanline: 0.10; --glass-noise: 0.05; }
-#follone-widget[data-state="spotlight"]{ --glass-opacity: 0.42; --glass-scanline: 0.10; }
-#follone-widget[data-state="error"]{ --glass-noise: 0.07; }
+/* ---- State tuning (no CRT textures) ---- */
+#follone-widget[data-state="standby"]{ --glass-opacity: 0.40; }
+#follone-widget[data-state="collecting"]{ --glass-opacity: 0.44; }
+#follone-widget[data-state="classifying"]{ --glass-opacity: 0.48; }
+#follone-widget[data-state="spotlight"]{ --glass-opacity: 0.52; }
+#follone-widget[data-state="error"]{ --glass-opacity: 0.40; }
 
 /* ---- Motion hooks ---- */
 @keyframes folloneBreath { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.04); } }
@@ -532,9 +526,7 @@
 #follone-widget[data-state="standby"] #follone-taskbar.ticker{
   animation: folloneBreath 2.4s ease-in-out infinite;
 }
-#follone-widget[data-state="classifying"] #follone-taskbar.ticker::before{
-  animation: folloneScan 1.2s linear infinite;
-}
+#follone-widget[data-state="classifying"] #follone-taskbar.ticker::before{ animation: none; }
 #follone-widget[data-state="spotlight"] #follone-taskbar.ticker{
   /* stronger presence during spotlight */
   animation: folloneBreath 1.2s ease-in-out infinite;
@@ -556,9 +548,7 @@
 #follone-widget[data-state="error"] #follone-taskbar.ticker{
   animation: none;
 }
-#follone-widget[data-state="cooldown"] #follone-taskbar.ticker::before{
-  animation: folloneScan 1.6s linear infinite;
-}
+#follone-widget[data-state="cooldown"] #follone-taskbar.ticker::before{ animation: none; }
 
 /* reduce harshness for overlay/backdrop */
 #follone-overlay, #follone-spotlight-overlay{
@@ -616,22 +606,24 @@
   position: fixed;
   width: 360px;
   max-width: min(420px, calc(100vw - 24px));
-  background: rgba(246,241,234,0.96);
-  border: 1px solid rgba(42,39,35,0.14);
+  background: rgba(255,255,255,0.92);
+  border: 1px solid rgba(123,97,255,0.18);
   border-radius: 18px;
   box-shadow: 0 26px 60px rgba(0,0,0,0.22);
   overflow: hidden;
 }
 
 #follone-spotlight .popover::before{
-  /* subtle CRT glass */
+  /* yume-kawa glass (no scanlines) */
   content:"";
   position:absolute; inset:0;
   pointer-events:none;
   background:
-    radial-gradient(220px 120px at 12% 0%, rgba(255,255,255,0.36), transparent 70%),
-    repeating-linear-gradient(180deg, rgba(0,0,0,0.05) 0px, rgba(0,0,0,0.05) 1px, rgba(0,0,0,0) 3px, rgba(0,0,0,0) 6px);
-  opacity: 0.35;
+    radial-gradient(220px 140px at 16% 6%, rgba(255,255,255,0.46), transparent 72%),
+    radial-gradient(260px 180px at 88% 10%, rgba(255,255,255,0.38), transparent 76%),
+    radial-gradient(220px 160px at 30% 96%, rgba(123,97,255,0.10), transparent 72%),
+    radial-gradient(220px 160px at 86% 86%, rgba(253,107,152,0.10), transparent 72%);
+  opacity: 0.42;
 }
 
 #follone-spotlight .ph{
@@ -941,14 +933,14 @@
 }
 
 #follone-loader::before{
-  /* Veil + subtle CRT texture */
+  /* Soft veil (yume-kawa). No scanlines / no CRT texture. */
   content:"";
   position:absolute; inset:0;
   background:
-    radial-gradient(1200px 600px at 50% 30%, rgba(255,255,255,0.55), rgba(0,0,0,0.35) 70%),
-    radial-gradient(600px 380px at 20% 15%, var(--ui-accent-glow), transparent 70%),
-    repeating-linear-gradient(180deg, rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 1px, rgba(0,0,0,0) 3px, rgba(0,0,0,0) 7px);
-  opacity: 0.95;
+    radial-gradient(1200px 680px at 50% 30%, rgba(255,255,255,0.70), rgba(255,255,255,0.35) 62%, rgba(0,0,0,0.08) 100%),
+    radial-gradient(620px 420px at 18% 16%, rgba(123,97,255,0.18), transparent 72%),
+    radial-gradient(620px 420px at 86% 18%, rgba(253,107,152,0.16), transparent 72%);
+  opacity: 0.92;
 }
 
 #follone-loader .box{
@@ -956,8 +948,9 @@
   width: min(520px, calc(100vw - 48px));
   border-radius: 22px;
   padding: 18px 18px 16px;
-  background: linear-gradient(180deg, rgba(246,241,234,0.92), rgba(239,231,221,0.86));
-  border: 1px solid rgba(42,39,35,0.18);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.94), rgba(247,244,255,0.86));
+  border: 1px solid rgba(123,97,255,0.18);
   box-shadow:
     0 24px 70px rgba(0,0,0,0.24),
     inset 0 1px 0 rgba(255,255,255,0.60);
@@ -974,13 +967,14 @@
 }
 #follone-loader.ready .brand{ color: rgba(42,39,35,0.92); text-shadow: 0 1px 0 rgba(255,255,255,0.60), 0 0 24px rgba(123,97,255,0.18); }
 #follone-loader .box::after{
-  /* inner dot grid */
+  /* soft paper sheen (no dot grid) */
   content:"";
   position:absolute; inset:0;
   background:
-    radial-gradient(rgba(42,39,35,0.08) 1px, transparent 1px);
-  background-size: 4px 4px;
-  opacity: 0.35;
+    radial-gradient(220px 140px at 18% 10%, rgba(255,255,255,0.55), transparent 70%),
+    radial-gradient(260px 160px at 90% 16%, rgba(255,255,255,0.40), transparent 74%),
+    linear-gradient(180deg, rgba(255,255,255,0.10), rgba(0,0,0,0.04));
+  opacity: 0.55;
   pointer-events:none;
 }
 
@@ -990,8 +984,8 @@
   letter-spacing: 0.10em;
   font-size: 22px;
   font-weight: 900;
-  color: rgba(42,39,35,0.88);
-  text-shadow: 0 1px 0 rgba(255,255,255,0.55);
+  color: rgba(58,49,66,0.92);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.70), 0 0 22px rgba(123,97,255,0.18);
   margin-bottom: 4px;
 }
 
@@ -1010,7 +1004,7 @@
   font-family: var(--font-dot-ui);
   font-size: 12px;
   letter-spacing: 0.08em;
-  color: rgba(42,39,35,0.70);
+  color: rgba(58,49,66,0.78);
 }
 
 #follone-loader .quote{
@@ -1018,34 +1012,36 @@
   margin-top: 8px;
   font-family: var(--font-dot-ui);
   font-size: 12px;
-  color: rgba(42,39,35,0.78);
+  color: rgba(58,49,66,0.82);
   opacity: 0.95;
 }
 
-/* Block gauge (■□□ style) with animated diagonal dot stripes */
+/* Progress gauge (soft glass) */
 #follone-loader .progressWrap{
   position: relative;
   margin-top: 14px;
   height: 14px;
   border-radius: 10px;
-  background: rgba(42,39,35,0.10);
-  border: 1px solid rgba(42,39,35,0.14);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.50);
+  background: rgba(255,255,255,0.62);
+  border: 1px solid rgba(123,97,255,0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.70),
+    inset 0 -1px 0 rgba(0,0,0,0.06);
   overflow: hidden;
 }
 
 #follone-loader .progressWrap::before{
-  /* block ticks */
+  /* subtle ticks */
   content:"";
   position:absolute; inset:0;
   background:
     repeating-linear-gradient(90deg,
       rgba(255,255,255,0.00) 0px,
       rgba(255,255,255,0.00) 10px,
-      rgba(42,39,35,0.16) 10px,
-      rgba(42,39,35,0.16) 12px);
-  opacity: 0.75;
-  mix-blend-mode: multiply;
+      rgba(58,49,66,0.10) 10px,
+      rgba(58,49,66,0.10) 12px);
+  opacity: 0.38;
+  mix-blend-mode: normal;
   pointer-events:none;
 }
 
@@ -1054,21 +1050,14 @@
   width: 0%;
   border-radius: 10px;
   background:
-    repeating-linear-gradient(135deg,
-      rgba(255,255,255,0.18) 0px,
-      rgba(255,255,255,0.18) 6px,
-      rgba(0,0,0,0.06) 6px,
-      rgba(0,0,0,0.06) 12px),
-    linear-gradient(90deg, rgba(42,39,35,0.25), rgba(42,39,35,0.28));
+    linear-gradient(90deg,
+      rgba(123,97,255,0.28),
+      rgba(184,171,255,0.44),
+      rgba(253,107,152,0.22));
   box-shadow:
     0 0 0 1px rgba(42,39,35,0.10) inset,
     0 0 24px var(--ui-accent-glow);
-  animation: folloneLoaderStripe 980ms linear infinite;
-}
-
-@keyframes folloneLoaderStripe{
-  0%{ background-position: 0 0, 0 0; }
-  100%{ background-position: 24px 0, 0 0; }
+  animation: none;
 }
 
 #follone-loader .meta{
@@ -1085,15 +1074,15 @@
   letter-spacing: 0.08em;
   padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.55);
-  border: 1px solid rgba(42,39,35,0.12);
-  color: rgba(42,39,35,0.72);
+  background: rgba(255,255,255,0.68);
+  border: 1px solid rgba(123,97,255,0.14);
+  color: rgba(58,49,66,0.74);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
 }
 
 /* Loader: spotlight-like emphasis (optional) */
 #follone-loader.show .box{
-  outline: 2px solid rgba(42,39,35,0.10);
+  outline: 2px solid rgba(123,97,255,0.10);
 }
 
 /* -------------------------------------------------
