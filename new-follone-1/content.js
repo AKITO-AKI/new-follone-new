@@ -157,6 +157,8 @@
       if (!bb) {
         bb = document.createElement("div");
         bb.className = "cansee-post-chip";
+        bb.setAttribute('data-cansee', 'post');
+        bb.setAttribute('data-cansee-role', 'chip');
         bb.style.pointerEvents = "none";
         // Ensure positioning context
         const st = getComputedStyle(host);
@@ -166,6 +168,148 @@
       bb.textContent = String(label || "");
       bb.dataset.kind = String(kind || "info");
       if (!bb.textContent) bb.remove();
+    } catch (_) {}
+  }
+
+  // ---------------------------------------------------------------------------
+  // CSS safety net
+  // ---------------------------------------------------------------------------
+  // overlay.css is injected via manifest content_scripts, but on partial updates
+  // or rare timing issues we can end up with unstyled loader/chips.
+  // This fallback only activates if we detect the loader is not styled.
+  function ensureOverlayCssFallback() {
+    try {
+      const styleId = 'cansee-inline-fallback-css';
+      if (document.getElementById(styleId)) return;
+
+      const probe = document.getElementById('follone-loader');
+      if (probe) {
+        const st = getComputedStyle(probe);
+        // If CSS is working, loader should be fixed + very high z-index.
+        if (st.position === 'fixed' && Number(st.zIndex || 0) > 1000000) return;
+      } else {
+        // If loader isn't in DOM yet, don't inject blindly; we'll re-check later.
+        return;
+      }
+
+      const css = `
+#follone-loader{position:fixed;inset:0;z-index:2147483638;display:none;align-items:center;justify-content:center;background:rgba(12,12,16,0.28);backdrop-filter:blur(6px);} 
+#follone-loader.show{display:flex;} 
+#follone-loader .box{width:min(520px,92vw);border-radius:18px;background:rgba(250,245,236,0.92);border:1px solid rgba(0,0,0,0.10);box-shadow:0 14px 44px rgba(0,0,0,0.28);padding:16px;} 
+#follone-loader .brand{font-weight:900;letter-spacing:0.2px;margin-bottom:6px;color:rgba(42,39,35,0.92);} 
+#follone-loader .subtitle{font-size:13px;opacity:0.85;margin-bottom:6px;} 
+#follone-loader .quote{font-size:12px;opacity:0.72;margin-bottom:12px;} 
+#follone-loader .progressWrap{height:10px;border-radius:999px;background:rgba(0,0,0,0.08);overflow:hidden;margin:8px 0 10px;} 
+#follone-loader .progressBar{height:100%;width:0%;background:linear-gradient(90deg, rgba(123,97,255,0.65), rgba(255,166,214,0.65));transition:width 220ms ease;} 
+#follone-loader .meta{display:flex;gap:8px;justify-content:space-between;} 
+#follone-loader .pill{font-size:11px;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.65);border:1px solid rgba(0,0,0,0.08);} 
+.cansee-post-chip{position:absolute;top:8px;right:8px;font-size:11px;font-weight:800;letter-spacing:0.3px;padding:4px 8px;border-radius:999px;background:rgba(250,245,236,0.92);border:1px solid rgba(0,0,0,0.10);box-shadow:0 6px 16px rgba(0,0,0,0.12);} 
+.cansee-post-chip[data-kind="queued"]{background:rgba(234,231,252,0.92);} 
+.cansee-post-chip[data-kind="processing"]{background:rgba(255,239,207,0.92);} 
+.cansee-post-chip[data-kind="done"]{background:rgba(220,255,236,0.92);} 
+.cansee-post-chip[data-kind="failed"]{background:rgba(255,222,232,0.92);} 
+`;
+      const st = document.createElement('style');
+      st.id = styleId;
+      st.textContent = css;
+      document.documentElement.appendChild(st);
+    } catch (_) {}
+  }
+
+  // ---------------------------------------------------------------------------
+  // Residue cleanup (X is SPA; injected DOM may remain after navigation)
+  // ---------------------------------------------------------------------------
+  function cleanupCanSeeOrphans(reason) {
+    try {
+      // orphan chips (no longer inside an article)
+      document.querySelectorAll('.cansee-post-chip').forEach((el) => {
+        if (!el.closest('article')) el.remove();
+      });
+
+      // orphan injected elements marked by data-cansee
+      document.querySelectorAll('[data-cansee]').forEach((el) => {
+        const scope = el.getAttribute('data-cansee');
+        if (scope === 'post' && !el.closest('article')) el.remove();
+      });
+
+      // duplicated UI roots (rare, but happens on reinjection)
+      ['follone-widget','follone-overlay','follone-spotlight','follone-loader','follone-onboarding','follone-onboarding-nudge'].forEach((id) => {
+        const els = document.querySelectorAll(`#${id}`);
+        if (els.length > 1) els.forEach((e, i) => { if (i > 0) e.remove(); });
+      });
+
+      pushEvent('cleanup', { reason: String(reason || '') });
+    } catch (_) {}
+  }
+
+  // ---------------------------------------------------------------------------
+  // Onboarding nudge (when the overlay welcome modal was skipped)
+  // ---------------------------------------------------------------------------
+  function showOnboardingNudge(kind) {
+    try {
+      if (document.getElementById('follone-onboarding-nudge')) return;
+
+      const box = document.createElement('div');
+      box.id = 'follone-onboarding-nudge';
+      box.setAttribute('data-cansee', 'ui');
+      box.setAttribute('data-cansee-role', 'onboarding-nudge');
+      box.style.cssText = [
+        'position:fixed',
+        'left:16px',
+        'bottom:16px',
+        'z-index:2147483639',
+        'width:min(360px, 92vw)',
+        'background:rgba(250,245,236,0.94)',
+        'border:1px solid rgba(0,0,0,0.10)',
+        'border-radius:16px',
+        'box-shadow:0 12px 32px rgba(0,0,0,0.20)',
+        'padding:12px 12px',
+        'backdrop-filter:blur(10px)'
+      ].join(';');
+
+      const t = document.createElement('div');
+      t.textContent = 'はじめての案内';
+      t.style.cssText = 'font-weight:900;font-size:12px;letter-spacing:0.2px;opacity:0.85;margin-bottom:6px;';
+
+      const p = document.createElement('div');
+      p.style.cssText = 'font-size:12px;line-height:1.5;opacity:0.85;';
+      p.textContent = (kind === 'ai')
+        ? 'まずは Options でAIの準備 → チュートリアルで体験しよう。'
+        : 'チュートリアルを開いて、1分で使い方を体験しよう。';
+
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:10px;';
+
+      const mkBtn = (label, pri) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        b.style.cssText = pri
+          ? 'cursor:pointer;border:none;border-radius:999px;padding:8px 10px;background:rgba(123,97,255,0.80);color:#fff;font-weight:900;font-size:12px;'
+          : 'cursor:pointer;border:1px solid rgba(0,0,0,0.12);border-radius:999px;padding:8px 10px;background:rgba(255,255,255,0.55);color:rgba(0,0,0,0.78);font-weight:900;font-size:12px;';
+        return b;
+      };
+
+      const btnOptions = mkBtn('Optionsへ', true);
+      btnOptions.addEventListener('click', async () => {
+        try { await sendMessageSafe({ type: 'FOLLONE_OPEN_OPTIONS' }); } catch (_) {}
+        box.remove();
+      });
+
+      const btnTutorial = mkBtn('Tutorial', true);
+      btnTutorial.addEventListener('click', async () => {
+        try { await sendMessageSafe({ type: 'FOLLONE_OPEN_TUTORIAL' }); } catch (_) {}
+        box.remove();
+      });
+
+      const btnDismiss = mkBtn('あとで', false);
+      btnDismiss.addEventListener('click', async () => {
+        try { await chrome.storage.local.set({ follone_onboarding_state: 'ai-setup' }); } catch (_) {}
+        box.remove();
+      });
+
+      row.append(btnDismiss, btnOptions, btnTutorial);
+      box.append(t, p, row);
+      document.documentElement.appendChild(box);
     } catch (_) {}
   }
   // expose minimal debug helper (safe)
@@ -4478,6 +4622,9 @@ function maybeApplyResultToElement(elem, res, ctx) {
     await loadResultCache();
     log("info","[SETTINGS]","loaded", { enabled: settings.enabled, aiMode: settings.aiMode, debug: settings.debug, logLevel: settings.logLevel, batchSize: settings.batchSize, idleMs: settings.idleMs });
     mountUI();
+    // Safety net: if overlay.css isn't applied (rare), inject minimal fallback.
+    // This prevents the startup loader from showing as plain unstyled text.
+    ensureOverlayCssFallback();
     // Apply minimized state early (may pause runtime)
     try { updateMinimizedUI(); } catch (_) {}
     if (state.uiMinimized) {
@@ -4516,6 +4663,14 @@ function maybeApplyResultToElement(elem, res, ctx) {
     }
 
     startObservers();
+
+    // Periodic cleanup: prevent DOM residue after SPA navigation / re-injection.
+    try {
+      cleanupCanSeeOrphans('boot');
+      if (!state._cleanupTimer) {
+        state._cleanupTimer = setInterval(() => cleanupCanSeeOrphans('tick'), 5000);
+      }
+    } catch (_) {}
 
     // Initial backend status (no auto-download)
     if (!settings.enabled || settings.aiMode === "off") {
@@ -4556,8 +4711,13 @@ if (!state) {
 
 const done = (state === "completed");
 if (!done && (state === "character" || state === "none")) {
-        await showOnboardingOverlay({ presetChar: String(ob.follone_characterId || "") });
-      }
+  await showOnboardingOverlay({ presetChar: String(ob.follone_characterId || "") });
+} else if (!done && (state === "ai-setup" || state === "ai_setup")) {
+  // User is already past character selection; show a small persistent guide.
+  showOnboardingNudge('ai');
+} else if (!done && state === "tutorial") {
+  showOnboardingNudge('tutorial');
+}
     } catch (e) {
       // ignore onboarding failures; do not break timeline
     }

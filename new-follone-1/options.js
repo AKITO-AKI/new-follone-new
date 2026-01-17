@@ -153,6 +153,47 @@
     return { focus, variety, explore, total, topKey, top, eff, nTotalTopics };
   }
 
+  // biasAgg (v2) structure:
+  // { tz, topics:[...], day:{ 'YYYY-MM-DD': { counts:{topic:n..}, total:n, newCount:n } }, updatedAt }
+  // Convert to an aggregated shape that calcBiasMetrics can consume.
+  function aggBiasByPeriod(biasAgg, period) {
+    const topics = Array.isArray(biasAgg?.topics) ? biasAgg.topics : [];
+    const out = { counts: {}, total: 0, topics };
+    const day = biasAgg?.day && typeof biasAgg.day === 'object' ? biasAgg.day : null;
+    if (!day) return out;
+
+    const keys = Object.keys(day).sort();
+    const now = new Date();
+
+    const within = (dayKey) => {
+      if (period === 'total') return true;
+      // dayKey is YYYY-MM-DD (Tokyo time). Treat it as local midnight (JST machines).
+      const d = new Date(dayKey + 'T00:00:00');
+      const diffDays = Math.floor((now - d) / 86400000);
+      if (period === 'day') return diffDays <= 1;
+      if (period === 'week') return diffDays <= 7;
+      if (period === 'month') return diffDays <= 30;
+      if (period === 'year') return diffDays <= 365;
+      return true;
+    };
+
+    for (const dayKey of keys) {
+      if (!within(dayKey)) continue;
+      const row = day[dayKey] || {};
+      const counts = row.counts && typeof row.counts === 'object' ? row.counts : {};
+      for (const [k, v] of Object.entries(counts)) {
+        out.counts[k] = Number(out.counts[k] || 0) + (Number(v) || 0);
+      }
+      out.total += (Number(row.total) || 0);
+    }
+
+    // Safety: if row.total wasn't reliable, derive from counts.
+    if (!out.total) {
+      out.total = Object.values(out.counts).reduce((a, b) => a + (Number(b) || 0), 0);
+    }
+    return out;
+  }
+
   function aggByPeriod(dayMap, period) {
     // dayMap: {"YYYY-MM-DD": {focus: n, variety: n, explore: n}}
     const out = { counts: { focus:0, variety:0, explore:0 }, total:0, range: { start:null, end:null, days:0 } };
@@ -342,6 +383,11 @@
     btnSchool: $('#btnSchool'),
     btnPersonal: $('#btnPersonal'),
     btnDiff: $('#btnDiff'),
+
+    // settings: tutorial
+    btnTutorial: $('#btnTutorial'),
+    btnResetTutorial: $('#btnReset'),
+    tutorialState: $('#tutorialState'),
     // Quick settings
     qsSafe: $('#qsSafe'),
     qsSoft: $('#qsSoft'),
@@ -636,7 +682,12 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
 
       // UI helper
       'follone_ui_schoolMode',
-      'follone_defaults_snapshot'
+      'follone_defaults_snapshot',
+
+      // onboarding / tutorial
+      'follone_onboarding_done',
+      'follone_onboarding_phase',
+      'follone_onboarding_state'
     ];
 
     if (!hasChrome()) {
@@ -907,7 +958,7 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
     let xpRate = 1.0;
     let xpReason = '';
     if (app.data.biasAgg) {
-      const m = calcBiasMetrics(app.data.biasAgg, app.period || 'week');
+      const m = calcBiasMetrics(aggBiasByPeriod(app.data.biasAgg, app.period || 'week'));
       const focus = m.focus || 0;
       const variety = m.variety || 0;
       const explore = m.explore || 0;
@@ -2013,7 +2064,7 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
   function renderBias() {
     const biasAgg = app.data.biasAgg;
     const period = app.period;
-    const agg = aggByPeriod(biasAgg, period);
+    const agg = aggBiasByPeriod(biasAgg, period);
     const m = calcBiasMetrics(agg);
 
     // update note
@@ -2904,6 +2955,60 @@ if (dom.btnBack) dom.btnBack.addEventListener('click', () => setView('home'));
     });
   }
 
+  // -----------------------------
+  // Tutorial (launch + status)
+  // -----------------------------
+  function renderTutorialState() {
+    const done = !!app.data.onboardingDone;
+    const phase = String(app.data.onboardingPhase || '').trim();
+    const state = String(app.data.onboardingState || '').trim();
+    if (!dom.tutorialState) return;
+
+    if (done) {
+      dom.tutorialState.textContent = 'completed';
+      return;
+    }
+    if (state === 'in_tutorial' && phase) {
+      dom.tutorialState.textContent = `in progress (${phase.replace('tutorial_step_', 'step ')})`;
+      return;
+    }
+    dom.tutorialState.textContent = 'not started';
+  }
+
+  function bindTutorialButtons() {
+    if (dom.btnTutorial) dom.btnTutorial.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!hasChrome()) return;
+      try {
+        chrome.tabs.create({ url: chrome.runtime.getURL('tutorial.html') });
+      } catch (err) {
+        console.warn('[options] open tutorial failed', err);
+      }
+    });
+
+    if (dom.btnResetTutorial) dom.btnResetTutorial.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!hasChrome()) return;
+      if (!confirm('チュートリアル進捗をリセットしますか？\n（HOMEの初回案内にも影響します）')) return;
+      try {
+        await chrome.storage.local.set({
+          follone_onboarding_done: false,
+          follone_onboarding_phase: '',
+          follone_onboarding_state: 'not_started'
+        });
+        app.data.onboardingDone = false;
+        app.data.onboardingPhase = '';
+        app.data.onboardingState = 'not_started';
+        renderTutorialState();
+        speak('……最初から、やり直せる。', (app.data.characterId || 'PET').toUpperCase());
+      } catch (err) {
+        console.warn('[options] reset tutorial failed', err);
+      }
+    });
+  }
+
   function bindGlanceAndHelp() {
     // help toggles
     $$('.hb-q').forEach(btn => {
@@ -3731,6 +3836,13 @@ function bindStorageListener() {
         app.data.usageMap = (v && typeof v === 'object') ? v : {};
         needArticle = true;
       }
+
+      if (changes.follone_onboarding_done || changes.follone_onboarding_phase || changes.follone_onboarding_state) {
+        if (changes.follone_onboarding_done) app.data.onboardingDone = !!changes.follone_onboarding_done.newValue;
+        if (changes.follone_onboarding_phase) app.data.onboardingPhase = changes.follone_onboarding_phase.newValue || '';
+        if (changes.follone_onboarding_state) app.data.onboardingState = changes.follone_onboarding_state.newValue || '';
+        renderTutorialState();
+      }
       if (changes.follone_equippedHead) {
         app.data.equippedHead = changes.follone_equippedHead.newValue || '';
       }
@@ -3785,6 +3897,7 @@ if (dom.selHead || dom.selFx) {
 
     bindNav();
     bindGlanceAndHelp();
+    bindTutorialButtons();
     normalizeTooltips();
     bindTransparencyPanel();
     bindAccessory();
@@ -3807,6 +3920,11 @@ if (dom.selHead || dom.selFx) {
     app.data.equippedFx = obj.follone_equippedFx || '';
     app.data.ownedHead = Array.isArray(obj.follone_ownedHead) ? obj.follone_ownedHead.map(String) : [];
     app.data.ownedFx = Array.isArray(obj.follone_ownedFx) ? obj.follone_ownedFx.map(String) : [];
+
+    // Tutorial / onboarding state
+    app.data.onboardingDone = !!obj.follone_onboarding_done;
+    app.data.onboardingPhase = obj.follone_onboarding_phase || '';
+    app.data.onboardingState = obj.follone_onboarding_state || '';
 
     // Quick settings (right monitor)
     app.data.safeFilter = obj.follone_safeFilterEnabled !== false;
@@ -3887,6 +4005,8 @@ if (dom.selHead || dom.selFx) {
     if (app.data.quest) renderQuest();
     renderBias();
       renderDev(); // updates right card summary too
+
+    renderTutorialState();
 
     updateGlance();
     updateDiffText();

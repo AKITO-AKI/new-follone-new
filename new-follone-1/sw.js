@@ -764,6 +764,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return;
     }
 
+    // Utility: open the tutorial page (used by onboarding nudge from content script).
+    if (msg.type === "FOLLONE_OPEN_TUTORIAL") {
+      try {
+        const url = chrome.runtime.getURL('tutorial.html');
+        await chrome.tabs.create({ url });
+        sendResponse({ ok: true });
+      } catch (e) {
+        sendResponse({ ok: false, errorCode: "OPEN_TUTORIAL_FAILED", error: String(e) });
+      }
+      return;
+    }
+
     if (msg.type === "FOLLONE_BACKEND_RESET") {
       try {
         resetOffscreen("user_reset");
@@ -1104,6 +1116,17 @@ if (msg.type === "FOLLONE_EQUIP_FX") {
     if (msg.type === "FOLLONE_OPEN_OPTIONS") {
       try {
         await chrome.runtime.openOptionsPage();
+        sendResponse({ ok: true });
+      } catch (e) {
+        sendResponse({ ok: false, error: String(e) });
+      }
+      return;
+    }
+
+    if (msg.type === "FOLLONE_OPEN_TUTORIAL") {
+      try {
+        const url = chrome.runtime.getURL('tutorial.html');
+        await chrome.tabs.create({ url });
         sendResponse({ ok: true });
       } catch (e) {
         sendResponse({ ok: false, error: String(e) });
