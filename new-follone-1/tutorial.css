@@ -256,6 +256,97 @@ button[disabled]{opacity:0.45; cursor:not-allowed}
 }
 .tSpotVeil.on{display:flex;}
 .tSpotVeil.out{opacity:0;}
+
+/* Finish / Certificate ------------------------------------------------ */
+.tFinishVeil{
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(18, 10, 20, .55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 99999;
+}
+.tFinishVeil.on{display:flex;}
+
+.tFinish{
+  width: min(860px, 96vw);
+  border-radius: 18px;
+  position: relative;
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,.88), rgba(255,255,255,.82));
+  border: 1px solid rgba(255,255,255,.55);
+  box-shadow: 0 24px 70px rgba(0,0,0,.35);
+  overflow: hidden;
+}
+.tFinishTop{padding: 8px 10px 14px 10px;}
+.tFinishKicker{font-size: 11px; letter-spacing: .18em; opacity: .75;}
+.tFinishTitle{font-size: 22px; font-weight: 900; margin-top: 4px;}
+.tFinishSub{font-size: 13px; opacity: .85; margin-top: 4px;}
+
+.tFinishGrid{display:grid; grid-template-columns: 250px 1fr; gap: 14px;}
+@media (max-width: 720px){
+  .tFinishGrid{grid-template-columns: 1fr;}
+}
+
+.tFinishLeft{
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255,255,255,.55);
+  border: 1px solid rgba(255,255,255,.55);
+}
+.tFinishBadge{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding: 8px;
+  border-radius: 14px;
+  background: radial-gradient(80% 80% at 30% 20%, rgba(253, 107, 152, .22), rgba(122, 86, 255, .08) 55%, rgba(255,255,255,.45) 100%);
+  border: 1px solid rgba(255,255,255,.6);
+}
+#finishBadge{image-rendering: pixelated;}
+.tFinishName{margin-top: 10px; font-weight: 900;}
+.tFinishMeta{font-size: 12px; opacity: .75; margin-top: 2px;}
+
+.tFinishRight{
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255,255,255,.58);
+  border: 1px solid rgba(255,255,255,.55);
+}
+
+.tFinishStats{display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px;}
+@media (max-width: 720px){
+  .tFinishStats{grid-template-columns: 1fr;}
+}
+.tStat{border-radius: 12px; padding: 10px; background: rgba(255,255,255,.6); border: 1px solid rgba(255,255,255,.6);}
+.tStat span{font-size: 11px; opacity: .75;}
+.tStat b{display:block; font-size: 18px; margin-top: 4px;}
+
+.tFinishNote{margin-top: 12px; font-size: 13px; opacity: .9;}
+.tFinishBtns{margin-top: 12px; display:flex; gap: 10px; flex-wrap: wrap;}
+.tFinishClose{margin-top: 12px; width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(0,0,0,.08); background: rgba(255,255,255,.65);}
+
+.tConfetti{position:absolute; inset: 0; pointer-events:none;}
+.tConfetti i{
+  position:absolute;
+  width: 10px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(253,107,152,.85);
+  animation: confetti-fall 1200ms linear forwards;
+}
+.tConfetti i:nth-child(3n){background: rgba(122,86,255,.85);}
+.tConfetti i:nth-child(3n+1){background: rgba(125, 216, 255, .9);}
+
+@keyframes confetti-fall{
+  from{transform: translateY(-20px) rotate(0deg); opacity: 0;}
+  10%{opacity: 1;}
+  to{transform: translateY(520px) rotate(260deg); opacity: 0;}
+}
 .tSpot{
   width:min(520px, 92vw);
   background:var(--panel);

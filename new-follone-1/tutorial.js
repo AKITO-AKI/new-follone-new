@@ -7,6 +7,11 @@
 
 const $ = (id) => document.getElementById(id);
 
+const TUTORIAL_METRICS = {
+  startedAt: Date.now(),
+  xpGained: 0,
+};
+
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 function setText(el, text){ if (el) el.textContent = String(text ?? ""); }
 
@@ -291,6 +296,7 @@ async function showSpotlightOnce({ allowXp=true } = {}){
   let gained = 0;
   if (allowXp) {
     gained = 10;
+    TUTORIAL_METRICS.xpGained += gained;
     const r = await addXp(gained);
     if (r && r.ok) {
       setText($("hudLv"), r.level);
@@ -312,7 +318,119 @@ async function showSpotlightOnce({ allowXp=true } = {}){
   return { choice, gained };
 }
 
+// Finish modal (certificate) ------------------------------------------
+function formatDuration(ms){
+  const sec = Math.max(0, Math.round(ms/1000));
+  const m = Math.floor(sec/60);
+  const s = sec % 60;
+  if (m <= 0) return `${s}秒`;
+  return `${m}分${s.toString().padStart(2,'0')}秒`;
+}
+
+function drawFinishBadge({ canvas, label='CanSee' }){
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+
+  // soft ring
+  ctx.beginPath();
+  ctx.arc(w/2, h/2, Math.min(w,h)*0.43, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,255,255,.65)';
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(w/2, h/2, Math.min(w,h)*0.40, 0, Math.PI*2);
+  ctx.strokeStyle = 'rgba(0,0,0,.12)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // ribbon
+  ctx.fillStyle = 'rgba(253,107,152,.85)';
+  ctx.fillRect(w*0.28, h*0.62, w*0.44, h*0.12);
+  ctx.fillStyle = 'rgba(122,86,255,.75)';
+  ctx.fillRect(w*0.28, h*0.74, w*0.44, h*0.06);
+
+  // star
+  const cx = w/2, cy = h*0.44;
+  const R = Math.min(w,h)*0.18;
+  const r = R*0.45;
+  ctx.beginPath();
+  for (let i=0;i<10;i++){
+    const a = (-Math.PI/2) + i*(Math.PI/5);
+    const rad = (i%2===0) ? R : r;
+    ctx.lineTo(cx + Math.cos(a)*rad, cy + Math.sin(a)*rad);
+  }
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,200,120,.9)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,.12)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // label
+  ctx.fillStyle = 'rgba(0,0,0,.78)';
+  ctx.font = '900 16px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, w/2, h*0.86);
+}
+
+async function showFinishModal({ name='—', steps=5, xp=0, durationMs=0 } = {}){
+  const veil = $('finishVeil');
+  if (!veil) return { action:'none' };
+  veil.classList.add('on');
+  veil.setAttribute('aria-hidden','false');
+
+  setText($('finishName'), name);
+  setText($('finishMeta'), `STEP ${steps}/5`);
+  setText($('stSteps'), steps);
+  setText($('stXp'), xp);
+  setText($('stTime'), formatDuration(durationMs));
+
+  drawFinishBadge({ canvas: $('finishBadge'), label: 'CanSee' });
+
+  // confetti
+  const conf = $('confetti');
+  if (conf) {
+    conf.innerHTML = '';
+    const n = 22;
+    for (let i=0;i<n;i++){
+      const p = document.createElement('i');
+      const x = Math.random()*100;
+      const d = 900 + Math.random()*600;
+      p.style.left = `${x}%`;
+      p.style.top = `${-20 - Math.random()*80}px`;
+      p.style.animationDuration = `${Math.round(d)}ms`;
+      p.style.transform = `rotate(${Math.random()*180}deg)`;
+      conf.appendChild(p);
+    }
+  }
+
+  const btnHome = $('finishHome');
+  const btnX = $('finishX');
+  const btnClose = $('finishClose');
+
+  const action = await new Promise((resolve) => {
+    btnHome?.addEventListener('click', () => resolve('home'), { once:true });
+    btnX?.addEventListener('click', () => resolve('x'), { once:true });
+    btnClose?.addEventListener('click', () => resolve('close'), { once:true });
+    veil.addEventListener('click', (e) => {
+      if (e.target === veil) resolve('close');
+    }, { once:true });
+  });
+
+  veil.classList.remove('on');
+  veil.setAttribute('aria-hidden','true');
+  return { action };
+}
+
 async function main(){
+  // reset metrics per load
+  TUTORIAL_METRICS.startedAt = Date.now();
+  TUTORIAL_METRICS.xpGained = 0;
+
   const STEPS = [
     { id:1, title:'WELCOME', hint:'準備と全体像' },
     { id:2, title:'Overlay', hint:'見方とチップ' },
@@ -487,6 +605,7 @@ async function main(){
       bPrev.addEventListener('click', () => goto(3), { once:true });
 
       bGain.addEventListener('click', async () => {
+        TUTORIAL_METRICS.xpGained += 10;
         const r = await addXp(10);
         if (r && r.ok) {
           setText($('hudLv'), r.level);
@@ -517,21 +636,31 @@ async function main(){
 
     await markOnboardingDone();
 
-    const bHome = mkBtn('HOME BASEへ戻る', { kind:'primary' });
+    const bShow = mkBtn('修了証を見る', { kind:'primary' });
+    const bHome = mkBtn('HOME BASEへ', { kind:'ghost' });
     const bX = mkBtn('Xを開く', { kind:'ghost' });
-    setActions([bHome, bX]);
+    setActions([bShow, bHome, bX]);
 
-    const doneAnd = () => completeMission(5, 0);
+    const finish = async (preferred) => {
+      completeMission(5, 0);
+      const elapsed = Date.now() - TUTORIAL_METRICS.startedAt;
+      const res = await showFinishModal({
+        name: charName(charId),
+        steps: 5,
+        xp: TUTORIAL_METRICS.xpGained,
+        durationMs: elapsed,
+      });
+      const act = res.action === 'close' ? preferred : res.action;
+      if (act === 'home') {
+        try { await chrome.runtime.openOptionsPage(); } catch (_e) {}
+      } else if (act === 'x') {
+        try { await chrome.tabs.create({ url: 'https://x.com/home' }); } catch (_e) {}
+      }
+    };
 
-    bHome.addEventListener('click', async () => {
-      doneAnd();
-      try { await chrome.runtime.openOptionsPage(); } catch (_e) {}
-    }, { once:true });
-
-    bX.addEventListener('click', async () => {
-      doneAnd();
-      try { await chrome.tabs.create({ url: 'https://x.com/home' }); } catch (_e) {}
-    }, { once:true });
+    bShow.addEventListener('click', () => finish('close'), { once:true });
+    bHome.addEventListener('click', () => finish('home'), { once:true });
+    bX.addEventListener('click', () => finish('x'), { once:true });
   };
 
   STEPS.forEach(s => {

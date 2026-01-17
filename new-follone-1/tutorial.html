@@ -109,6 +109,48 @@
     </div>
   </div>
 
+  <!-- Finish / Certificate (Step 5) -->
+  <div class="tFinishVeil" id="finishVeil" aria-hidden="true">
+    <div class="tFinish" role="dialog" aria-modal="true" aria-label="修了証">
+      <div class="tFinishTop">
+        <div class="tFinishKicker">CERTIFICATE</div>
+        <div class="tFinishTitle">チュートリアル修了 🎉</div>
+        <div class="tFinishSub">CanSeeを“安全に使う”準備ができました</div>
+      </div>
+
+      <div class="tFinishGrid">
+        <div class="tFinishLeft">
+          <div class="tFinishBadge">
+            <canvas id="finishBadge" width="160" height="160" aria-label="バッジ"></canvas>
+          </div>
+          <div class="tFinishName" id="finishName">—</div>
+          <div class="tFinishMeta" id="finishMeta">STEP 5/5</div>
+        </div>
+
+        <div class="tFinishRight">
+          <div class="tFinishStats" aria-label="達成内容">
+            <div class="tStat"><span>完了ステップ</span><b id="stSteps">5</b></div>
+            <div class="tStat"><span>獲得XP</span><b id="stXp">0</b></div>
+            <div class="tStat"><span>所要時間</span><b id="stTime">—</b></div>
+          </div>
+
+          <div class="tFinishNote">
+            いつでも <b>HOME BASE</b> の <b>PREPARE</b> から再実行できます。
+          </div>
+
+          <div class="tFinishBtns">
+            <button type="button" id="finishHome" class="tPrimary">HOME BASEへ</button>
+            <button type="button" id="finishX" class="tGhost">Xを開く</button>
+          </div>
+
+          <button type="button" id="finishClose" class="tFinishClose" aria-label="閉じる">閉じる</button>
+        </div>
+      </div>
+
+      <div class="tConfetti" id="confetti" aria-hidden="true"></div>
+    </div>
+  </div>
+
   <script src="pet/PetEngine.js"></script>
   <script src="tutorial.js"></script>
 </body>
