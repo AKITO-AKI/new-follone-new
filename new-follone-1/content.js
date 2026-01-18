@@ -3019,6 +3019,14 @@ function installSearchLoaderHook() {
 
 
   function renderWidget() {
+    // Colorize gauge fills by progress (low→mid→high) for quick readability.
+    const applyStage = (el, pct) => {
+      try {
+        if (!el) return;
+        const p = clamp(Number(pct) || 0, 0, 100);
+        el.dataset.stage = (p >= 67) ? 'high' : (p >= 34 ? 'mid' : 'low');
+      } catch (_) {}
+    };
     const meta = document.getElementById("follone-meta");
     const enabled = settings.enabled ? "ON" : "OFF";
     const sec = Math.floor((Date.now() - state.sessionStartMs) / 1000);
@@ -3051,7 +3059,9 @@ function installSearchLoaderHook() {
       const info = xpToLevel(state.xp || 0);
       expLabel.textContent = `EXP Lv ${info.lv}`;
       expNext.textContent = `${info.xp}/${info.next}`;
-      expBar.style.width = `${Math.round(info.prog * 100)}%`;
+      const pct = Math.round(info.prog * 100);
+      expBar.style.width = `${pct}%`;
+      applyStage(expBar, pct);
     }
 
     // Quests (Daily 3 / Weekly 1)
@@ -3091,9 +3101,21 @@ function installSearchLoaderHook() {
     if (varietyScoreEl) varietyScoreEl.textContent = `${varietyVal ? varietyVal.toFixed(1) : "--"}`;
     if (exploreScoreEl) exploreScoreEl.textContent = `${Math.round(explorePct)}%`;
 
-    if (focusBarEl) focusBarEl.style.width = `${Math.max(0, Math.min(100, focusPct))}%`;
-    if (varietyBarEl) varietyBarEl.style.width = `${Math.max(0, Math.min(100, varietyPct))}%`;
-    if (exploreBarEl) exploreBarEl.style.width = `${Math.max(0, Math.min(100, explorePct))}%`;
+    if (focusBarEl) {
+      const p = Math.max(0, Math.min(100, focusPct));
+      focusBarEl.style.width = `${p}%`;
+      applyStage(focusBarEl, p);
+    }
+    if (varietyBarEl) {
+      const p = Math.max(0, Math.min(100, varietyPct));
+      varietyBarEl.style.width = `${p}%`;
+      applyStage(varietyBarEl, p);
+    }
+    if (exploreBarEl) {
+      const p = Math.max(0, Math.min(100, explorePct));
+      exploreBarEl.style.width = `${p}%`;
+      applyStage(exploreBarEl, p);
+    }
 
     if (topEl) topEl.textContent = `top: ${top}`;
     if (sugEl) sugEl.textContent = `おすすめ: ${qs.length ? qs.map(q => `「${q}」`).join("、") : "—"}`;
@@ -4186,16 +4208,9 @@ function markQueueStatus(postKey, status, extra){
     const el = state.elemById.get(tweetId) || document.querySelector?.(`[data-follone-id="${tweetId}"]`);
     if (el){
       if (status === 'pending') markChip(el, 'queued', 'queued');
-      else if (status === 'processing') markChip(el, 'processing', 'running');
-      else if (status === 'done'){
-        markChip(el, 'done', 'done');
-        // auto remove after a short delay to avoid残骸
-        setTimeout(() => {
-          try{ const bb = el.querySelector?.('.cansee-post-chip'); if (bb) bb.remove(); }catch(_e){}
-        }, 1800);
-      } else if (status === 'failed'){
-        markChip(el, 'failed', 'error');
-      }
+      else if (status === 'processing') markChip(el, 'processing', 'processing');
+      else if (status === 'done') markChip(el, 'done', 'done');
+      else if (status === 'failed') markChip(el, 'failed', 'failed');
     }
   }catch(_e){}
   scheduleQueueSnapshot(0);

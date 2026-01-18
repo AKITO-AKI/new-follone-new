@@ -5,14 +5,13 @@
 
 #follone-widget{
   /* ---- Tokens (base) ---- */
-  /* yume-kawa cream / lavender white */
-  --ui-body-0: #FFFFFF;
-  --ui-body-1: #F7F5FF;
-  --ui-body-2: #F1ECFF;
-  --ui-ink-0: #3A3142;
-  --ui-ink-1: #5A4F66;
-  --ui-ink-2: #7A6D8A;
-  --ui-line: rgba(58,49,66,0.14);
+  --ui-body-0: #F6F1EA;
+  --ui-body-1: #EFE7DD;
+  --ui-body-2: #E7DDCF;
+  --ui-ink-0: #2A2723;
+  --ui-ink-1: #4A433B;
+  --ui-ink-2: #7A7065;
+  --ui-line: rgba(42,39,35,0.12);
 
   /* Accent (overridden by data-skin) */
   --ui-accent: #7B61FF;
@@ -25,12 +24,11 @@
   --shadow-inset-2: inset 0 -3px 6px rgba(0,0,0,0.12);
   --bevel: inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -1px 0 rgba(0,0,0,0.10);
 
-  /* Glass strengths (yume-kawa / transparent) */
-  --glass-opacity: 0.42;
-  --glass-reflect: 0.22;
-  /* retro CRT textures are disabled (no scanlines / no dot noise) */
-  --glass-scanline: 0;
-  --glass-noise: 0;
+  /* CRT glass strengths (state overrides in CSS below) */
+  --glass-opacity: 0.36;
+  --glass-reflect: 0.20;
+  --glass-scanline: 0.08;
+  --glass-noise: 0.04;
 
   /* Typography (dot-ish) */
   --font-dot-ui: "DotGothic16", "Dot Gothic 16", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
@@ -83,19 +81,8 @@
   border-radius: 20px;
   background: linear-gradient(180deg, var(--ui-body-0), var(--ui-body-1));
   box-shadow: var(--shadow-outer);
-  border: 1px solid color-mix(in srgb, var(--ui-accent) 18%, transparent);
+  border: 1px solid rgba(42,39,35,0.10);
   overflow: hidden;
-}
-
-/* yume-kawa dot frame (subtle) */
-#follone-widget .deviceBody::before{
-  content:"";
-  position:absolute;
-  inset: 9px;
-  border-radius: 14px;
-  pointer-events:none;
-  border: 1px dotted color-mix(in srgb, var(--ui-accent) 28%, transparent);
-  opacity: 0.85;
 }
 
 /* Inset screen area (embedded) */
@@ -105,23 +92,9 @@
   border-radius: 18px;
   margin: 10px;
   background: rgba(255,255,255,0.48);
-  border: 1px solid color-mix(in srgb, var(--ui-accent) 20%, transparent);
+  border: 1px solid rgba(42,39,35,0.10);
   box-shadow: var(--shadow-inset-1), var(--shadow-inset-2);
   backdrop-filter: blur(6px);
-}
-
-#follone-widget .deviceInset::after{
-  /* pastel pixel dots on the edge */
-  content:"";
-  position:absolute;
-  inset: 0;
-  border-radius: 18px;
-  pointer-events:none;
-  opacity: 0.10;
-  background:
-    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--ui-accent) 55%, transparent) 1px, transparent 2px);
-  background-size: 12px 12px;
-  mask: linear-gradient(#000,#000);
 }
 
 /* Glass layer (CRT) */
@@ -130,24 +103,20 @@
   inset: 0;
   pointer-events: none;
   opacity: var(--glass-opacity);
-  /* yume-kawa glass: soft bokeh + a tiny sparkle hint (no CRT scanlines) */
   background:
-    radial-gradient(260px 180px at 18% 6%, rgba(255,255,255,var(--glass-reflect)), transparent 70%),
-    radial-gradient(280px 220px at 92% 8%, rgba(255,255,255,calc(var(--glass-reflect) * 0.85)), transparent 74%),
-    radial-gradient(220px 160px at 35% 92%, rgba(123,97,255,0.10), transparent 72%),
-    radial-gradient(240px 160px at 82% 82%, rgba(253,107,152,0.10), transparent 72%);
+    radial-gradient(180px 120px at 20% 0%, rgba(255,255,255,var(--glass-reflect)), transparent 65%),
+    radial-gradient(220px 140px at 90% 10%, rgba(255,255,255,calc(var(--glass-reflect) * 0.75)), transparent 70%),
+    repeating-linear-gradient(180deg, rgba(0,0,0,var(--glass-scanline)) 0px, rgba(0,0,0,var(--glass-scanline)) 1px, rgba(0,0,0,0) 3px, rgba(0,0,0,0) 6px);
 }
 
-/* Sparkle dust (very subtle) */
+/* Noise grain */
 #follone-widget .glassLayer::after{
   content:"";
   position:absolute; inset:0;
-  opacity: 0.18;
   background:
-    radial-gradient(rgba(255,255,255,0.9) 1px, transparent 2px);
-  background-size: 38px 38px;
-  background-position: 0 0;
-  filter: blur(0.2px);
+    radial-gradient(rgba(42,39,35,var(--glass-noise)) 1px, transparent 1px);
+  background-size: 3px 3px;
+  opacity: 0.7;
 }
 
 /* Accent FX */
@@ -175,29 +144,7 @@
 }
 
 #follone-widget .petWrap{ position: relative; }
-
-/* gentle floating (alive / fluffy) */
-@keyframes cansee-floaty{
-  0%{ transform: translate3d(0,0,0); }
-  50%{ transform: translate3d(0,-3px,0); }
-  100%{ transform: translate3d(0,0,0); }
-}
-
-@keyframes cansee-sway{
-  0%{ transform: rotate(-0.35deg); }
-  50%{ transform: rotate(0.35deg); }
-  100%{ transform: rotate(-0.35deg); }
-}
-
-#follone-widget .petWrap{
-  animation: cansee-floaty 3.8s ease-in-out infinite;
-  will-change: transform;
-}
-
 #follone-widget .avatar{
-  /* tiny extra sway for the avatar window itself */
-  animation: cansee-sway 6.2s ease-in-out infinite;
-  transform-origin: 50% 70%;
   width: 88px;
   height: 88px;
   border-radius: 18px;
@@ -354,6 +301,35 @@
   transition: width var(--t-slow) var(--ease-soft);
 }
 
+/* Progress-based color (low→mid→high): cute & readable at a glance */
+#follone-widget .meterFill[data-stage="low"]{
+  background:
+    repeating-linear-gradient(90deg,
+      rgba(42,39,35,0.10) 0px,
+      rgba(42,39,35,0.10) 9px,
+      rgba(0,0,0,0) 9px,
+      rgba(0,0,0,0) 12px),
+    linear-gradient(90deg, rgba(180,205,255,0.92), rgba(200,180,255,0.92));
+}
+#follone-widget .meterFill[data-stage="mid"]{
+  background:
+    repeating-linear-gradient(90deg,
+      rgba(42,39,35,0.10) 0px,
+      rgba(42,39,35,0.10) 9px,
+      rgba(0,0,0,0) 9px,
+      rgba(0,0,0,0) 12px),
+    linear-gradient(90deg, rgba(210,170,255,0.92), rgba(160,140,255,0.92));
+}
+#follone-widget .meterFill[data-stage="high"]{
+  background:
+    repeating-linear-gradient(90deg,
+      rgba(42,39,35,0.10) 0px,
+      rgba(42,39,35,0.10) 9px,
+      rgba(0,0,0,0) 9px,
+      rgba(0,0,0,0) 12px),
+    linear-gradient(90deg, rgba(255,178,225,0.95), rgba(255,130,190,0.95));
+}
+
 /* Tip glow (accent only at the end) */
 #follone-widget .meterFill::after{
   content:"";
@@ -365,6 +341,16 @@
   background: radial-gradient(closest-side, var(--ui-accent-glow), transparent 70%);
   opacity: 0.85;
   pointer-events:none;
+}
+
+#follone-widget .meterFill[data-stage="low"]::after{
+  background: radial-gradient(closest-side, rgba(190,210,255,0.85), transparent 70%);
+}
+#follone-widget .meterFill[data-stage="mid"]::after{
+  background: radial-gradient(closest-side, rgba(210,180,255,0.85), transparent 70%);
+}
+#follone-widget .meterFill[data-stage="high"]::after{
+  background: radial-gradient(closest-side, rgba(255,175,225,0.88), transparent 70%);
 }
 
 /* Boot sequence: meters light up with a left-to-right sweep */
@@ -534,6 +520,52 @@
   transition: width var(--t-mid) var(--ease-out);
 }
 
+#follone-widget .xpBar[data-stage="low"]{
+  background:
+    repeating-linear-gradient(90deg,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 9px,
+      rgba(0,0,0,0.18) 9px,
+      rgba(0,0,0,0.18) 12px),
+    repeating-linear-gradient(135deg,
+      rgba(255,255,255,0.22) 0px,
+      rgba(255,255,255,0.22) 6px,
+      rgba(0,0,0,0) 6px,
+      rgba(0,0,0,0) 12px),
+    linear-gradient(90deg, rgba(190,210,255,0.95), rgba(200,180,255,0.95));
+  background-size: 12px 100%, 24px 24px, auto;
+}
+#follone-widget .xpBar[data-stage="mid"]{
+  background:
+    repeating-linear-gradient(90deg,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 9px,
+      rgba(0,0,0,0.18) 9px,
+      rgba(0,0,0,0.18) 12px),
+    repeating-linear-gradient(135deg,
+      rgba(255,255,255,0.22) 0px,
+      rgba(255,255,255,0.22) 6px,
+      rgba(0,0,0,0) 6px,
+      rgba(0,0,0,0) 12px),
+    linear-gradient(90deg, rgba(210,180,255,0.95), rgba(160,140,255,0.95));
+  background-size: 12px 100%, 24px 24px, auto;
+}
+#follone-widget .xpBar[data-stage="high"]{
+  background:
+    repeating-linear-gradient(90deg,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 9px,
+      rgba(0,0,0,0.18) 9px,
+      rgba(0,0,0,0.18) 12px),
+    repeating-linear-gradient(135deg,
+      rgba(255,255,255,0.22) 0px,
+      rgba(255,255,255,0.22) 6px,
+      rgba(0,0,0,0) 6px,
+      rgba(0,0,0,0) 12px),
+    linear-gradient(90deg, rgba(255,175,225,0.97), rgba(255,130,190,0.97));
+  background-size: 12px 100%, 24px 24px, auto;
+}
+
 @keyframes folloneStripe{
   from{ background-position: 0 0, 0 0, 0 0; }
   to{ background-position: 0 0, 24px 24px, 0 0; }
@@ -563,17 +595,17 @@
 #follone-widget .actionBtn:hover{ filter: brightness(1.03); transform: translateY(-1px); }
 #follone-widget .actionBtn:active{ transform: translateY(0px); }
 
-#follone-widget .muted{ margin-top: 8px; color: rgba(58,49,66,0.62); font-size: 11px; }
+#follone-widget .muted{ margin-top: 8px; color: rgba(42,39,35,0.55); font-size: 11px; }
 
 /* hide text-heavy quests on overlay (kept for internal logic) */
 #follone-widget .quests{ display:none; }
 
-/* ---- State tuning (no CRT textures) ---- */
-#follone-widget[data-state="standby"]{ --glass-opacity: 0.40; }
-#follone-widget[data-state="collecting"]{ --glass-opacity: 0.44; }
-#follone-widget[data-state="classifying"]{ --glass-opacity: 0.48; }
-#follone-widget[data-state="spotlight"]{ --glass-opacity: 0.52; }
-#follone-widget[data-state="error"]{ --glass-opacity: 0.40; }
+/* ---- State tuning ---- */
+#follone-widget[data-state="standby"]{ --glass-scanline: 0.03; --glass-noise: 0.01; }
+#follone-widget[data-state="collecting"]{ --glass-scanline: 0.06; --glass-noise: 0.03; }
+#follone-widget[data-state="classifying"]{ --glass-scanline: 0.10; --glass-noise: 0.05; }
+#follone-widget[data-state="spotlight"]{ --glass-opacity: 0.42; --glass-scanline: 0.10; }
+#follone-widget[data-state="error"]{ --glass-noise: 0.07; }
 
 /* ---- Motion hooks ---- */
 @keyframes folloneBreath { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.04); } }
@@ -585,7 +617,9 @@
 #follone-widget[data-state="standby"] #follone-taskbar.ticker{
   animation: folloneBreath 2.4s ease-in-out infinite;
 }
-#follone-widget[data-state="classifying"] #follone-taskbar.ticker::before{ animation: none; }
+#follone-widget[data-state="classifying"] #follone-taskbar.ticker::before{
+  animation: folloneScan 1.2s linear infinite;
+}
 #follone-widget[data-state="spotlight"] #follone-taskbar.ticker{
   /* stronger presence during spotlight */
   animation: folloneBreath 1.2s ease-in-out infinite;
@@ -607,7 +641,9 @@
 #follone-widget[data-state="error"] #follone-taskbar.ticker{
   animation: none;
 }
-#follone-widget[data-state="cooldown"] #follone-taskbar.ticker::before{ animation: none; }
+#follone-widget[data-state="cooldown"] #follone-taskbar.ticker::before{
+  animation: folloneScan 1.6s linear infinite;
+}
 
 /* reduce harshness for overlay/backdrop */
 #follone-overlay, #follone-spotlight-overlay{
@@ -665,24 +701,22 @@
   position: fixed;
   width: 360px;
   max-width: min(420px, calc(100vw - 24px));
-  background: rgba(255,255,255,0.92);
-  border: 1px solid rgba(123,97,255,0.18);
+  background: rgba(246,241,234,0.96);
+  border: 1px solid rgba(42,39,35,0.14);
   border-radius: 18px;
   box-shadow: 0 26px 60px rgba(0,0,0,0.22);
   overflow: hidden;
 }
 
 #follone-spotlight .popover::before{
-  /* yume-kawa glass (no scanlines) */
+  /* subtle CRT glass */
   content:"";
   position:absolute; inset:0;
   pointer-events:none;
   background:
-    radial-gradient(220px 140px at 16% 6%, rgba(255,255,255,0.46), transparent 72%),
-    radial-gradient(260px 180px at 88% 10%, rgba(255,255,255,0.38), transparent 76%),
-    radial-gradient(220px 160px at 30% 96%, rgba(123,97,255,0.10), transparent 72%),
-    radial-gradient(220px 160px at 86% 86%, rgba(253,107,152,0.10), transparent 72%);
-  opacity: 0.42;
+    radial-gradient(220px 120px at 12% 0%, rgba(255,255,255,0.36), transparent 70%),
+    repeating-linear-gradient(180deg, rgba(0,0,0,0.05) 0px, rgba(0,0,0,0.05) 1px, rgba(0,0,0,0) 3px, rgba(0,0,0,0) 6px);
+  opacity: 0.35;
 }
 
 #follone-spotlight .ph{
@@ -735,20 +769,6 @@
 }
 #follone-spotlight .actions button:hover{ transform: translateY(-1px); filter: brightness(1.02); }
 #follone-spotlight .actions button:active{ transform: translateY(0px) scale(0.99); }
-
-/* Primary CTA: “検索へ” (widen perspective) */
-#follone-spotlight .actions #follone-sp-search{
-  border-color: rgba(126,66,255,0.28);
-  background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(250,245,255,0.78));
-  box-shadow: 0 14px 30px rgba(126,66,255,0.18), 0 10px 24px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.85);
-}
-#follone-spotlight .actions #follone-sp-search:hover{ filter: brightness(1.03) saturate(1.02); }
-
-/* Secondary: “戻る” */
-#follone-spotlight .actions #follone-sp-back{ background: rgba(255,255,255,0.62); }
-
-/* Destructive-ish: “続ける” keeps neutral */
-#follone-spotlight .actions #follone-sp-continue{ background: rgba(255,255,255,0.70); }
 
 /* Strong warning styling */
 @keyframes spWarnPulse { 0%,49%{ box-shadow: 0 26px 60px rgba(0,0,0,0.22), 0 0 0 1px rgba(224,58,58,0.22);} 50%,100%{ box-shadow: 0 30px 70px rgba(0,0,0,0.26), 0 0 0 2px rgba(224,58,58,0.36);} }
@@ -992,14 +1012,14 @@
 }
 
 #follone-loader::before{
-  /* Soft veil (yume-kawa). No scanlines / no CRT texture. */
+  /* Veil + subtle CRT texture */
   content:"";
   position:absolute; inset:0;
   background:
-    radial-gradient(1200px 680px at 50% 30%, rgba(255,255,255,0.70), rgba(255,255,255,0.35) 62%, rgba(0,0,0,0.08) 100%),
-    radial-gradient(620px 420px at 18% 16%, rgba(123,97,255,0.18), transparent 72%),
-    radial-gradient(620px 420px at 86% 18%, rgba(253,107,152,0.16), transparent 72%);
-  opacity: 0.92;
+    radial-gradient(1200px 600px at 50% 30%, rgba(255,255,255,0.55), rgba(0,0,0,0.35) 70%),
+    radial-gradient(600px 380px at 20% 15%, var(--ui-accent-glow), transparent 70%),
+    repeating-linear-gradient(180deg, rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 1px, rgba(0,0,0,0) 3px, rgba(0,0,0,0) 7px);
+  opacity: 0.95;
 }
 
 #follone-loader .box{
@@ -1007,33 +1027,22 @@
   width: min(520px, calc(100vw - 48px));
   border-radius: 22px;
   padding: 18px 18px 16px;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.94), rgba(247,244,255,0.86));
-  border: 1px solid rgba(123,97,255,0.18);
+  background: linear-gradient(180deg, rgba(246,241,234,0.92), rgba(239,231,221,0.86));
+  border: 1px solid rgba(42,39,35,0.18);
   box-shadow:
     0 24px 70px rgba(0,0,0,0.24),
     inset 0 1px 0 rgba(255,255,255,0.60);
   overflow: hidden;
 }
 
-
-#follone-loader.ready .box{
-  transform: translateZ(0) scale(1.01);
-  box-shadow:
-    0 28px 80px rgba(0,0,0,0.26),
-    0 0 0 2px rgba(123,97,255,0.14),
-    inset 0 1px 0 rgba(255,255,255,0.65);
-}
-#follone-loader.ready .brand{ color: rgba(42,39,35,0.92); text-shadow: 0 1px 0 rgba(255,255,255,0.60), 0 0 24px rgba(123,97,255,0.18); }
 #follone-loader .box::after{
-  /* soft paper sheen (no dot grid) */
+  /* inner dot grid */
   content:"";
   position:absolute; inset:0;
   background:
-    radial-gradient(220px 140px at 18% 10%, rgba(255,255,255,0.55), transparent 70%),
-    radial-gradient(260px 160px at 90% 16%, rgba(255,255,255,0.40), transparent 74%),
-    linear-gradient(180deg, rgba(255,255,255,0.10), rgba(0,0,0,0.04));
-  opacity: 0.55;
+    radial-gradient(rgba(42,39,35,0.08) 1px, transparent 1px);
+  background-size: 4px 4px;
+  opacity: 0.35;
   pointer-events:none;
 }
 
@@ -1043,8 +1052,8 @@
   letter-spacing: 0.10em;
   font-size: 22px;
   font-weight: 900;
-  color: rgba(58,49,66,0.92);
-  text-shadow: 0 1px 0 rgba(255,255,255,0.70), 0 0 22px rgba(123,97,255,0.18);
+  color: rgba(42,39,35,0.88);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.55);
   margin-bottom: 4px;
 }
 
@@ -1063,7 +1072,7 @@
   font-family: var(--font-dot-ui);
   font-size: 12px;
   letter-spacing: 0.08em;
-  color: rgba(58,49,66,0.78);
+  color: rgba(42,39,35,0.70);
 }
 
 #follone-loader .quote{
@@ -1071,36 +1080,34 @@
   margin-top: 8px;
   font-family: var(--font-dot-ui);
   font-size: 12px;
-  color: rgba(58,49,66,0.82);
+  color: rgba(42,39,35,0.78);
   opacity: 0.95;
 }
 
-/* Progress gauge (soft glass) */
+/* Block gauge (■□□ style) with animated diagonal dot stripes */
 #follone-loader .progressWrap{
   position: relative;
   margin-top: 14px;
   height: 14px;
   border-radius: 10px;
-  background: rgba(255,255,255,0.62);
-  border: 1px solid rgba(123,97,255,0.16);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.70),
-    inset 0 -1px 0 rgba(0,0,0,0.06);
+  background: rgba(42,39,35,0.10);
+  border: 1px solid rgba(42,39,35,0.14);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.50);
   overflow: hidden;
 }
 
 #follone-loader .progressWrap::before{
-  /* subtle ticks */
+  /* block ticks */
   content:"";
   position:absolute; inset:0;
   background:
     repeating-linear-gradient(90deg,
       rgba(255,255,255,0.00) 0px,
       rgba(255,255,255,0.00) 10px,
-      rgba(58,49,66,0.10) 10px,
-      rgba(58,49,66,0.10) 12px);
-  opacity: 0.38;
-  mix-blend-mode: normal;
+      rgba(42,39,35,0.16) 10px,
+      rgba(42,39,35,0.16) 12px);
+  opacity: 0.75;
+  mix-blend-mode: multiply;
   pointer-events:none;
 }
 
@@ -1109,14 +1116,21 @@
   width: 0%;
   border-radius: 10px;
   background:
-    linear-gradient(90deg,
-      rgba(123,97,255,0.28),
-      rgba(184,171,255,0.44),
-      rgba(253,107,152,0.22));
+    repeating-linear-gradient(135deg,
+      rgba(255,255,255,0.18) 0px,
+      rgba(255,255,255,0.18) 6px,
+      rgba(0,0,0,0.06) 6px,
+      rgba(0,0,0,0.06) 12px),
+    linear-gradient(90deg, rgba(42,39,35,0.25), rgba(42,39,35,0.28));
   box-shadow:
     0 0 0 1px rgba(42,39,35,0.10) inset,
     0 0 24px var(--ui-accent-glow);
-  animation: none;
+  animation: folloneLoaderStripe 980ms linear infinite;
+}
+
+@keyframes folloneLoaderStripe{
+  0%{ background-position: 0 0, 0 0; }
+  100%{ background-position: 24px 0, 0 0; }
 }
 
 #follone-loader .meta{
@@ -1133,15 +1147,15 @@
   letter-spacing: 0.08em;
   padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.68);
-  border: 1px solid rgba(123,97,255,0.14);
-  color: rgba(58,49,66,0.74);
+  background: rgba(255,255,255,0.55);
+  border: 1px solid rgba(42,39,35,0.12);
+  color: rgba(42,39,35,0.72);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
 }
 
 /* Loader: spotlight-like emphasis (optional) */
 #follone-loader.show .box{
-  outline: 2px solid rgba(123,97,255,0.10);
+  outline: 2px solid rgba(42,39,35,0.10);
 }
 
 /* -------------------------------------------------
@@ -1325,41 +1339,3 @@
   box-shadow: none;
 }
 #follone-limitPopup .lp-btn:active{ transform: translateY(1px); }
-
-
-/* --- Spotlight buttons: more yume-kawa, clearer --- */
-#follone-sp-back,
-#follone-sp-search,
-#follone-sp-settings,
-#follone-sp-continue{
-  min-height: 34px;
-  padding: 9px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(122, 103, 255, 0.25);
-  box-shadow: 0 6px 18px rgba(93, 71, 255, 0.10);
-  letter-spacing: 0.2px;
-  font-weight: 900;
-}
-#follone-sp-back,
-#follone-sp-search,
-#follone-sp-settings{
-  background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.48));
-  color: rgba(20, 14, 34, 0.80);
-}
-#follone-sp-continue{
-  background: linear-gradient(180deg, rgba(162, 137, 255, 0.95), rgba(123, 97, 255, 0.85));
-  color: rgba(255,255,255,0.98);
-}
-#follone-sp-back:hover,
-#follone-sp-search:hover,
-#follone-sp-settings:hover,
-#follone-sp-continue:hover{
-  transform: translateY(-1px);
-  box-shadow: 0 10px 26px rgba(93, 71, 255, 0.16);
-}
-#follone-sp-back:active,
-#follone-sp-search:active,
-#follone-sp-settings:active,
-#follone-sp-continue:active{
-  transform: translateY(0px) scale(0.99);
-}
