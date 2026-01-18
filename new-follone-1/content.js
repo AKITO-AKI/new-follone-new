@@ -4468,7 +4468,7 @@ function choosePriorityBatch(maxN) {
       state.inFlightJobId = jobId;
       const jobPromise = classifyBatch(batch);
       state.inFlightPromise = jobPromise;
-      const results = await jobPromise;
+      const rawResults = await jobPromise;
 
       // If the watchdog abandoned this job (or a newer job started), never apply its results.
       if (state.abandonedJobIds.has(jobId) || state.inFlightJobId !== jobId) {
@@ -4479,6 +4479,40 @@ function choosePriorityBatch(maxN) {
         log("debug","[CLASSIFY]","discarded due to pause", { paused: state.runtimePaused });
         return;
       }
+      // Phase31: Defensive result normalization.
+      // Backend can sometimes return [] / partial outputs due to cold start, schema drift,
+      // or message timeouts. If we leave the batch in "processing", the system appears frozen.
+      // Normalize to exactly one result per post so the pipeline always progresses.
+      const want = batch.map(p => ({ id: String(p?.id || ""), key: String(p?.key || "") }))
+        .filter(x => x.id);
+      const got = Array.isArray(rawResults) ? rawResults : [];
+      const byId = new Map();
+      const byKey = new Map();
+      for (const r of got) {
+        if (!r || !r.id) continue;
+        byId.set(String(r.id), r);
+        if (r._key) byKey.set(String(r._key), r);
+      }
+      const results = want.map(({ id, key }) => {
+        const found = (key && byKey.get(key)) || byId.get(id);
+        if (found) return found;
+        // Fallback: safe mock result to keep UI/BIAS/queue moving.
+        // Attach _key so downstream status updates still work.
+        const text = String(batch.find(p => String(p?.id) === id)?.text || "");
+        const m = mockClassifyOne({ id, text });
+        m._key = key;
+        return m;
+      });
+      if (!got.length || got.length !== want.length) {
+        log("warn", "[CLASSIFY]", "normalized results (backend empty/partial)", {
+          want: want.length,
+          got: got.length,
+          filled: want.length - Math.min(got.length, want.length),
+          status: state.sessionStatus,
+          lastError: state.lastErrorCode || ""
+        });
+      }
+
       log("info", "[CLASSIFY]", "results", results.map(x => ({ id: x.id, key: x._key, risk: x.riskScore, cat: x.riskCategory, topic: x.topicCategory })));
 
       if (results.length) /* time-based loader */
