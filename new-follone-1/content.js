@@ -539,6 +539,16 @@
     // Phase29-B: queue state machine meta (pending/processing/done/failed)
     queueMetaByKey: new Map(), // postKey -> {status, tries, enqueuedAt, startTs, endTs, lastError, seq, y, tweetId}
     queueDoneTs: [], // timestamps when an item becomes done (for throughput)
+
+    // Phase30: watchdog-safe job control
+    // - If a classify job times out, we *requeue* its posts, but the original Promise may still resolve later.
+    // - We must ignore late results from abandoned jobs to avoid overwriting newer results or double-counting.
+    jobSeq: 0,
+    inFlightJobId: 0,
+    inFlightPromise: null,
+    abandonedJobIds: new Set(),
+    lastBackendResetTs: 0,
+
     discoverQueue: [],
     discoverScheduled: false,
     analyzeScheduled: false,
@@ -4077,6 +4087,21 @@ function choosePriorityBatch(maxN) {
             pushEvent("watchdog_timeout", { code: E.E02, batchSize: batch.length });
             log("warn", "[WATCHDOG]", "timeout -> recover", { batchSize: batch.length });
 
+            // Mark the current job as abandoned so late results won't corrupt state.
+            try {
+              const jid = Number(state.inFlightJobId || 0);
+              if (jid) state.abandonedJobIds.add(jid);
+            } catch (_e) {}
+
+            // Best-effort: reset the backend to break a stuck offscreen session.
+            // (Chrome message Promises can't be truly cancelled from here.)
+            try {
+              if (!state.lastBackendResetTs || (now - state.lastBackendResetTs) > 30000) {
+                state.lastBackendResetTs = now;
+                chrome.runtime.sendMessage({ type: "FOLLONE_BACKEND_RESET" }).catch(() => {});
+              }
+            } catch (_e) {}
+
             state.inFlight = false;
             state.inFlightSinceTs = 0;
 
@@ -4190,9 +4215,22 @@ function choosePriorityBatch(maxN) {
     } catch(_e) {}
 
     pushEvent("inflight_start", { n: batch.length });
+    let jobId = 0;
     try {
       log("info", "[CLASSIFY]", "batch", batch.map(x => x.key || x.id), { maxN, backlog });
-      const results = await classifyBatch(batch);
+
+      // Phase30: job token to ignore late results from timed-out/stuck classify calls
+      jobId = ++state.jobSeq;
+      state.inFlightJobId = jobId;
+      const jobPromise = classifyBatch(batch);
+      state.inFlightPromise = jobPromise;
+      const results = await jobPromise;
+
+      // If the watchdog abandoned this job (or a newer job started), never apply its results.
+      if (state.abandonedJobIds.has(jobId) || state.inFlightJobId !== jobId) {
+        log("warn", "[CLASSIFY]", "late results ignored", { jobId, abandoned: state.abandonedJobIds.has(jobId), current: state.inFlightJobId });
+        return;
+      }
       if (state.runtimePaused || (state.pauseEpoch || 0) !== epoch) {
         log("debug","[CLASSIFY]","discarded due to pause", { paused: state.runtimePaused });
         return;
@@ -4243,6 +4281,12 @@ function choosePriorityBatch(maxN) {
       }
       await maybeShowFilterBubble();
     } catch (e) {
+      // If this job was already abandoned (watchdog timeout) or replaced by a newer job,
+      // never requeue/double-count based on its late error.
+      if (jobId && (state.abandonedJobIds.has(jobId) || state.inFlightJobId !== jobId)) {
+        log("warn", "[CLASSIFY]", "late error ignored", { jobId, abandoned: state.abandonedJobIds.has(jobId), current: state.inFlightJobId });
+        return;
+      }
       const code = errCodeFromException(e);
 
       // Phase29-B: requeue on classify failure (retry/skip/abort)
@@ -4271,13 +4315,23 @@ function choosePriorityBatch(maxN) {
       pushEvent("classify_failed", { code, backoffMs });
       log("error", "[CLASSIFY]", `failed ${code}`, String(e));
     } finally {
+      const owner = !!jobId && state.inFlightJobId === jobId;
+
+      // If this is a late/abandoned job, do not touch global state.
+      if (!owner || state.abandonedJobIds.has(jobId)) return;
+
       // Success path resets failStreak gently
       if (!state.backoffUntilTs || nowMs() >= state.backoffUntilTs) {
         state.failStreak = clamp((state.failStreak || 0) - 1, 0, 12);
       }
+
+      // Release in-flight lock
+      state.inFlightPromise = null;
       state.inFlight = false;
       state.inFlightSinceTs = 0;
       state.inFlightBatch = null;
+      state.inFlightJobId = 0;
+      try { state.abandonedJobIds.delete(jobId); } catch (_e) {}
       pushEvent("inflight_end", {});
 
       // Continue processing backlog
