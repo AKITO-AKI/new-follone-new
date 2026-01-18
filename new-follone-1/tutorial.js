@@ -270,10 +270,26 @@ async function playChipFlow(postEl){
 
 // Spotlight -----------------------------------------------------------
 async function showSpotlightOnce({ allowXp=true } = {}){
+  // Safety: Spotlight demo should ONLY appear when this step explicitly arms it.
+  // Users reported it sometimes shows immediately on load due to state mismatch/stale UI.
+  if (!window.__tutorialSpotlightArmed) {
+    const veil0 = $("spotVeil");
+    if (veil0) {
+      veil0.classList.remove("on", "out");
+      veil0.style.display = "none";
+      veil0.setAttribute("aria-hidden", "true");
+    }
+    return { choice: "none", gained: 0 };
+  }
+  window.__tutorialSpotlightArmed = false;
+
   const veil = $("spotVeil");
   const btnBack = $("spotBack");
   const btnSearch = $("spotSearch");
   if (!veil || !btnBack || !btnSearch) return { choice:"none", gained:0 };
+
+  // Ensure inline hide from the safety reset doesn't block display.
+  veil.style.display = "";
 
   veil.classList.add("on");
   await sleep(60);
@@ -283,6 +299,9 @@ async function showSpotlightOnce({ allowXp=true } = {}){
   const choice = await new Promise((resolve) => {
     btnBack.addEventListener("click", () => resolve("back"), { once:true });
     btnSearch.addEventListener("click", () => resolve("search"), { once:true });
+    veil.addEventListener("click", (e) => {
+      if (e.target === veil) resolve("dismiss");
+    }, { once:true });
   });
 
   btnBack.classList.remove("tPulse");
@@ -292,6 +311,9 @@ async function showSpotlightOnce({ allowXp=true } = {}){
   await sleep(220);
   veil.classList.remove("on");
   veil.classList.remove("out");
+  // Keep it fully hidden between demos.
+  veil.style.display = "none";
+  veil.setAttribute("aria-hidden", "true");
 
   let gained = 0;
   if (allowXp) {
@@ -427,6 +449,18 @@ async function showFinishModal({ name='—', steps=5, xp=0, durationMs=0 } = {})
 }
 
 async function main(){
+  // Hard reset: ensure Spotlight veil is hidden on initial load.
+  // (Prevents "Spotlight appears immediately" when something goes off-script.)
+  try {
+    const sv = $("spotVeil");
+    if (sv) {
+      sv.classList.remove("on", "out");
+      sv.style.display = "none";
+      sv.setAttribute("aria-hidden", "true");
+    }
+  } catch (_e) {}
+  window.__tutorialSpotlightArmed = false;
+
   // reset metrics per load
   TUTORIAL_METRICS.startedAt = Date.now();
   TUTORIAL_METRICS.xpGained = 0;
@@ -571,6 +605,8 @@ async function main(){
       bPrev.addEventListener('click', () => goto(2), { once:true });
 
       await new Promise(r => bDo.addEventListener('click', r, { once:true }));
+      // Arm the demo explicitly so it never pops unintentionally.
+      window.__tutorialSpotlightArmed = true;
       const { choice } = await showSpotlightOnce({ allowXp:true });
       completeMission(3, 0);
 
@@ -635,6 +671,23 @@ async function main(){
     ]);
 
     await markOnboardingDone();
+
+    // PhaseA: make the tutorial a one-time mandatory step (Lv1 -> Lv2).
+    try {
+      const prog = await getProgress();
+      if (prog && Number(prog.level || 1) <= 1) {
+        // add a bit more XP until we see Lv2 (bounded)
+        await addXp(25);
+        const prog2 = await getProgress();
+        if (prog2 && Number(prog2.level || 1) <= 1) {
+          await addXp(60);
+        }
+      }
+      await chrome.storage.local.set({
+        follone_tutorial_state: 'done',
+        follone_tutorial_done: true
+      });
+    } catch (_e) {}
 
     const bShow = mkBtn('修了証を見る', { kind:'primary' });
     const bHome = mkBtn('HOME BASEへ', { kind:'ghost' });

@@ -892,11 +892,156 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
     return true;
   }
 
-function setView(view) {
-    if (enforceTutorialGate(view)) {
-      // Keep user on HOME while tutorial is incomplete.
-      view = 'home';
+  // ------------------------------------------------------------
+  // PhaseA: Simple forced tutorial focus (Lv1 only)
+  // ------------------------------------------------------------
+  function removeTutorialFocusOverlay(){
+    try { document.getElementById('hb-tutorial-focus')?.remove(); } catch(_) {}
+  }
+
+  function createTutorialFocusOverlay(targetBtn, { title, body, buttonText, onActivate } = {}) {
+    removeTutorialFocusOverlay();
+    if (!targetBtn) return false;
+    const root = document.createElement('div');
+    root.id = 'hb-tutorial-focus';
+    root.setAttribute('data-cansee', 'ui');
+    root.style.cssText = [
+      'position:fixed',
+      'inset:0',
+      'z-index:2147483646',
+      'opacity:0',
+      'transition:opacity .18s ease',
+    ].join(';');
+
+    const veil = document.createElement('div');
+    veil.style.cssText = [
+      'position:absolute',
+      'inset:0',
+      'background:rgba(245,240,255,0.56)',
+      'backdrop-filter:blur(6px)',
+    ].join(';');
+
+    const focus = document.createElement('div');
+    focus.style.cssText = [
+      'position:absolute',
+      'border-radius:18px',
+      'border:2px solid rgba(166, 140, 255, 0.95)',
+      'box-shadow:0 10px 28px rgba(120, 90, 255, 0.28), 0 0 0 6px rgba(255, 255, 255, 0.42)',
+      'pointer-events:none',
+      'animation:hbPulse 1.25s ease-in-out infinite',
+    ].join(';');
+
+    const proxy = document.createElement('button');
+    proxy.type = 'button';
+    proxy.textContent = buttonText || (targetBtn.textContent || 'TUTORIAL');
+    proxy.style.cssText = [
+      'position:absolute',
+      'border-radius:18px',
+      'border:1px solid rgba(0,0,0,0.12)',
+      'background:linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.72))',
+      'font-weight:900',
+      'color:rgba(30,20,50,0.88)',
+      'cursor:pointer',
+      'padding:0',
+    ].join(';');
+
+    const panel = document.createElement('div');
+    panel.style.cssText = [
+      'position:absolute',
+      'min-width:240px',
+      'max-width:min(340px, 86vw)',
+      'background:linear-gradient(180deg, rgba(255,255,255,0.96), rgba(255,255,255,0.86))',
+      'border:1px solid rgba(166,140,255,0.35)',
+      'border-radius:18px',
+      'box-shadow:0 18px 40px rgba(120, 90, 255, 0.22)',
+      'padding:12px 12px',
+      'backdrop-filter:blur(10px)',
+      'pointer-events:none',
+    ].join(';');
+
+    const t = document.createElement('div');
+    t.textContent = title || 'はじめての案内';
+    t.style.cssText = 'font-weight:1000;font-size:12px;letter-spacing:.2px;opacity:.88;margin-bottom:6px;';
+    const p = document.createElement('div');
+    p.textContent = body || '最初の1分だけ。ここを押してチュートリアルを始めよう。';
+    p.style.cssText = 'font-size:12px;line-height:1.55;opacity:.86;';
+    panel.appendChild(t);
+    panel.appendChild(p);
+
+    const sync = () => {
+      try {
+        const r = targetBtn.getBoundingClientRect();
+        const pad = 8;
+        const left = Math.max(8, r.left - pad);
+        const top = Math.max(8, r.top - pad);
+        const w = Math.max(24, r.width + pad*2);
+        const h = Math.max(24, r.height + pad*2);
+        focus.style.left = left + 'px';
+        focus.style.top = top + 'px';
+        focus.style.width = w + 'px';
+        focus.style.height = h + 'px';
+        proxy.style.left = left + 'px';
+        proxy.style.top = top + 'px';
+        proxy.style.width = w + 'px';
+        proxy.style.height = h + 'px';
+
+        const px = Math.min(window.innerWidth - 12 - 260, left);
+        const py = Math.min(window.innerHeight - 12 - 110, top + h + 10);
+        panel.style.left = Math.max(12, px) + 'px';
+        panel.style.top = Math.max(12, py) + 'px';
+      } catch (_) {}
+    };
+
+    veil.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); }, true);
+    proxy.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      try { await (onActivate && onActivate()); } catch(_) {}
+    }, true);
+
+    // keyframes (once)
+    if (!document.getElementById('hbTutorialFocusStyle')) {
+      const st = document.createElement('style');
+      st.id = 'hbTutorialFocusStyle';
+      st.textContent = '@keyframes hbPulse{0%{transform:scale(1)}50%{transform:scale(1.02)}100%{transform:scale(1)}}';
+      document.head.appendChild(st);
     }
+
+    root.appendChild(veil);
+    root.appendChild(focus);
+    root.appendChild(proxy);
+    root.appendChild(panel);
+    document.body.appendChild(root);
+
+    sync();
+    window.addEventListener('resize', sync, { passive:true });
+    window.addEventListener('scroll', sync, { passive:true });
+    requestAnimationFrame(() => { root.style.opacity = '1'; });
+    return true;
+  }
+
+  async function forceTutorialFocusIfNeeded(){
+    try {
+      // rule: trigger when user status is Lv1 (Options open) and tutorial not done
+      if (Number(app.data.level || 1) !== 1) { removeTutorialFocusOverlay(); return; }
+      const done = !!app.data.onboardingDone;
+      if (done) { removeTutorialFocusOverlay(); return; }
+
+      const btn = document.getElementById('onbStartTutorial') || document.getElementById('btnOpenTutorial') || dom.btnTutorial || null;
+      if (!btn) return;
+
+      createTutorialFocusOverlay(btn, {
+        title: 'Lv1: まずは1分チュートリアル',
+        body: 'このボタンだけ押せる状態にしてあるよ。終わったらLvアップして、通常モードへ移行する。',
+        buttonText: 'TUTORIALを始める',
+        onActivate: async () => {
+          try { await chrome.storage.local.set({ follone_tutorial_state: 'in_tutorial' }); } catch(_) {}
+          openTutorialTabSafe();
+        }
+      });
+    } catch(_) {}
+  }
+
+function setView(view) {
     if (!view) view = 'home';
     const prevView = app.view;
     if (prevView === view) return;
@@ -3366,6 +3511,9 @@ if (dom.btnBack) dom.btnBack.addEventListener('click', () => setView('home'));
         app.data.onboardingPhase = '';
         app.data.onboardingState = 'not_started';
         renderTutorialState();
+
+    // PhaseA: when Lv1 & tutorial incomplete, force-focus the tutorial start button.
+    window.setTimeout(() => { forceTutorialFocusIfNeeded(); }, 250);
         speak('……最初から、やり直せる。', (app.data.characterId || 'PET').toUpperCase());
       } catch (err) {
         console.warn('[options] reset tutorial failed', err);
@@ -4207,6 +4355,7 @@ function bindStorageListener() {
         if (changes.follone_onboarding_phase) app.data.onboardingPhase = changes.follone_onboarding_phase.newValue || '';
         if (changes.follone_onboarding_state) app.data.onboardingState = changes.follone_onboarding_state.newValue || '';
         renderTutorialState();
+        window.setTimeout(() => { forceTutorialFocusIfNeeded(); }, 120);
       }
       if (changes.follone_equippedHead) {
         app.data.equippedHead = changes.follone_equippedHead.newValue || '';

@@ -278,6 +278,214 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Tutorial Flow (A): Lv1 -> force Options -> force Tutorial
+  // ---------------------------------------------------------------------------
+  async function getTutorialGateState(){
+    try {
+      const obj = await chrome.storage.local.get([
+        'follone_onboarding_done',
+        'follone_onboarding_state',
+        'follone_onboarding_phase',
+        'follone_tutorial_state'
+      ]);
+      const done = !!obj.follone_onboarding_done || String(obj.follone_onboarding_state||'') === 'completed' || String(obj.follone_tutorial_state||'') === 'done';
+      return {
+        done,
+        state: String(obj.follone_tutorial_state||'') || (done ? 'done' : ''),
+        phase: String(obj.follone_onboarding_phase||'')
+      };
+    } catch (_e) {
+      return { done:false, state:'', phase:'' };
+    }
+  }
+
+  function removeTutorialFocus(){
+    try {
+      const el = document.getElementById('follone-tutorial-focus');
+      if (el) el.remove();
+    } catch (_) {}
+  }
+
+  function createFocusOverlayForElement(targetEl, { title='TUTORIAL', body='Optionsでチュートリアルを始めよう。', buttonText='Optionsへ', onActivate } = {}) {
+    try {
+      removeTutorialFocus();
+      if (!targetEl) return false;
+
+      const root = document.createElement('div');
+      root.id = 'follone-tutorial-focus';
+      root.setAttribute('data-cansee','ui');
+      root.setAttribute('data-cansee-role','tutorial-focus');
+      root.style.cssText = [
+        'position:fixed',
+        'inset:0',
+        'z-index:2147483646',
+        'pointer-events:auto',
+        'background:rgba(140,120,255,0.10)',
+        'backdrop-filter:blur(2px)',
+        'transition:opacity .18s ease',
+        'opacity:0'
+      ].join(';');
+
+      const focus = document.createElement('div');
+      focus.style.cssText = [
+        'position:fixed',
+        'left:0',
+        'top:0',
+        'width:10px',
+        'height:10px',
+        'border-radius:18px',
+        'box-shadow:0 0 0 3px rgba(123,97,255,0.55), 0 18px 40px rgba(0,0,0,0.20)',
+        'background:rgba(255,255,255,0.55)',
+        'backdrop-filter:blur(10px)',
+        'pointer-events:none'
+      ].join(';');
+
+      const panel = document.createElement('div');
+      panel.style.cssText = [
+        'position:fixed',
+        'left:16px',
+        'bottom:16px',
+        'width:min(360px, 92vw)',
+        'background:rgba(255,255,255,0.72)',
+        'border:1px solid rgba(123,97,255,0.28)',
+        'border-radius:18px',
+        'box-shadow:0 16px 44px rgba(0,0,0,0.22)',
+        'padding:12px 12px',
+        'backdrop-filter:blur(12px)'
+      ].join(';');
+
+      const hd = document.createElement('div');
+      hd.textContent = title;
+      hd.style.cssText = 'font-weight:900;font-size:12px;letter-spacing:0.25px;opacity:0.85;margin-bottom:6px;';
+
+      const msg = document.createElement('div');
+      msg.textContent = body;
+      msg.style.cssText = 'font-size:12px;line-height:1.55;opacity:0.85;';
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = buttonText;
+      btn.style.cssText = 'cursor:pointer;margin-top:10px;border:none;border-radius:999px;padding:10px 12px;background:linear-gradient(135deg, rgba(123,97,255,0.95), rgba(255,140,200,0.85));color:#fff;font-weight:900;font-size:12px;box-shadow:0 10px 20px rgba(0,0,0,0.18)';
+
+      panel.appendChild(hd);
+      panel.appendChild(msg);
+      panel.appendChild(btn);
+
+      const sync = () => {
+        try {
+          const r = targetEl.getBoundingClientRect();
+          const pad = 6;
+          focus.style.left = Math.max(0, r.left - pad) + 'px';
+          focus.style.top = Math.max(0, r.top - pad) + 'px';
+          focus.style.width = Math.max(20, r.width + pad*2) + 'px';
+          focus.style.height = Math.max(20, r.height + pad*2) + 'px';
+        } catch (_) {}
+      };
+
+      const onAny = (e) => {
+        // block any click except our button and the focus overlay
+        e.preventDefault();
+        e.stopPropagation();
+      };
+
+      root.addEventListener('mousedown', onAny, true);
+      root.addEventListener('click', onAny, true);
+      root.addEventListener('wheel', onAny, { passive:false, capture:true });
+      root.addEventListener('touchstart', onAny, { passive:false, capture:true });
+
+      // clickable proxy on top of focused element
+      const proxy = document.createElement('button');
+      proxy.type='button';
+      proxy.setAttribute('aria-label','tutorial focus');
+      proxy.style.cssText = [
+        'position:fixed',
+        'left:0',
+        'top:0',
+        'width:10px',
+        'height:10px',
+        'border-radius:18px',
+        'border:none',
+        'background:transparent',
+        'cursor:pointer',
+        'box-shadow:0 0 0 0 rgba(0,0,0,0)',
+        'pointer-events:auto'
+      ].join(';');
+
+      const syncProxy = () => {
+        try {
+          const r = targetEl.getBoundingClientRect();
+          const pad = 6;
+          proxy.style.left = Math.max(0, r.left - pad) + 'px';
+          proxy.style.top = Math.max(0, r.top - pad) + 'px';
+          proxy.style.width = Math.max(20, r.width + pad*2) + 'px';
+          proxy.style.height = Math.max(20, r.height + pad*2) + 'px';
+        } catch (_) {}
+      };
+
+      proxy.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try { await (onActivate && onActivate()); } catch (_) {}
+      }, true);
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try { await (onActivate && onActivate()); } catch (_) {}
+      }, true);
+
+      root.appendChild(focus);
+      root.appendChild(proxy);
+      root.appendChild(panel);
+      document.body.appendChild(root);
+
+      sync();
+      syncProxy();
+      window.addEventListener('resize', () => { sync(); syncProxy(); }, { passive:true });
+      window.addEventListener('scroll', () => { sync(); syncProxy(); }, { passive:true });
+
+      requestAnimationFrame(() => { root.style.opacity = '1'; });
+      return true;
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  async function maybeTriggerTutorialFlowAfterLoader(){
+    try {
+      const gate = await getTutorialGateState();
+      if (gate.done) { removeTutorialFocus(); return; }
+      if (Number(state.level || 1) !== 1) { removeTutorialFocus(); return; }
+
+      // ensure widget is expanded so the SET button is visible
+      try {
+        if (state.uiMinimized) {
+          state.uiMinimized = false;
+          updateMinimizedUI();
+        }
+      } catch (_) {}
+
+      // wait for SET button
+      let btn = document.getElementById('follone-options');
+      for (let i=0;i<18 && !btn;i++){
+        await new Promise(r => setTimeout(r, 180));
+        btn = document.getElementById('follone-options');
+      }
+      if (!btn) return;
+
+      createFocusOverlayForElement(btn, {
+        title: 'はじめての案内',
+        body: 'Lv1のあいだは、まず Options でチュートリアルを始めよう。',
+        buttonText: 'Optionsへ',
+        onActivate: async () => {
+          try { await chrome.storage.local.set({ follone_tutorial_state: 'need_options' }); } catch (_) {}
+          try { await sendMessageSafe({ type: 'FOLLONE_OPEN_OPTIONS' }); } catch (_) {}
+          // keep overlay until Options opens; it's ok if left.
+        }
+      });
+    } catch (_) {}
+  }
+
+// ---------------------------------------------------------------------------
   // Onboarding nudge (when the overlay welcome modal was skipped)
   // ---------------------------------------------------------------------------
   function showOnboardingNudge(kind) {
@@ -512,6 +720,7 @@
 
     // Intervention arming / smoothness
     bootTs: Date.now(),
+    sessionStartMs: Date.now(),
     userInteracted: false,
     firstInteractionTs: 0,
     interveneHold: new Map(), // id -> { stage: 'centered', since }
@@ -2026,6 +2235,7 @@ function setLoaderProgress(progress) {
     } catch (_) {}
 
     hideLoader();
+    try { await maybeTriggerTutorialFlowAfterLoader(); } catch (_) {}
     setTask("stand-by");
     scheduleHighlightFlush(0);
     log("info","[LOADER]","gate release", { kind, winner, waitedMs: Date.now() - start });
@@ -3288,7 +3498,7 @@ function installSearchLoaderHook() {
     if (settings.aiMode === "off") return [];
 
     // Try offscreen Prompt API backend first (extension origin).
-    if (settings.aiMode === "auto") {
+    if (settings.aiMode !== "off") {
       // Use postKey (tweetId + textHash) for backend IDs to avoid collisions and allow re-analysis when text changes.
       const keyToTweetId = new Map();
       const backendBatch = batch.map((p) => {
@@ -3380,9 +3590,19 @@ const dt = Math.round(performance.now() - t0);
       }
     }
 
-    // No mock fallback: Prompt API must be available. If not, return empty.
+    // Backend not-ready/unavailable: fall back to mock soデモが止まらないようにする
+    if (settings.aiMode !== "off") {
+      try { state.sessionStatus = "mock"; } catch (_) {}
+      try { clearError(); } catch (_) {}
+      try { setTask("stand-by"); } catch (_) {}
+      try { state.lastLatencyMs = 0; state.lastEngine = "mock"; } catch (_) {}
+      try { signalAnyResult({ engine: "mock", latencyMs: 0, note: "fallback" }); } catch (_) {}
+      // loader gate: mockでも初回解析完了として扱って進める
+      try { signalFirstClassifyDone({ ok: true, engine: "mock", latencyMs: 0, note: "fallback" }); } catch (_) {}
+      return classifyBatchMock(batch);
+    }
+
     signalAnyResult({ engine: "none", error: "backend_unavailable" });
-    // Do not release loader gate when backend is unavailable.
     return [];
   }
 
@@ -3899,6 +4119,9 @@ const dt = Math.round(performance.now() - t0);
       markQueueStatus(postKey, 'pending', { tries: rc });
     } catch(_e) {}
 
+    // visible chip for UX
+    try { if (post.elem) markChip(post.elem, 'queued', 'queued'); } catch(_e) {}
+
     try { post.elem.dataset.folloneId = post.id; } catch (_) {}
     try { maybeAttachIdTag(post.elem, post.id); } catch (_) {}
 
@@ -3921,6 +4144,7 @@ function ensureQueueMeta(postKey, seed){
   if (m) return m;
   const base = {
     key: postKey,
+    tweetId: '',
     status: "pending", // pending | processing | done | failed
     tries: 0,
     enqueuedAt: nowMs(),
@@ -3933,6 +4157,8 @@ function ensureQueueMeta(postKey, seed){
   if (seed && typeof seed === "object"){
     if (seed.seq) base.seq = seed.seq;
     if (seed.y) base.y = seed.y;
+  
+    if (seed.tweetId) base.tweetId = String(seed.tweetId);
   }
   state.queueMetaByKey.set(postKey, base);
   return base;
@@ -3954,6 +4180,24 @@ function markQueueStatus(postKey, status, extra){
     // cap memory
     if (state.queueDoneTs.length > 2000) state.queueDoneTs = state.queueDoneTs.slice(-1200);
   }
+  // chip UI sync (tweet DOM)
+  try{
+    const tweetId = String(m.tweetId || (String(postKey).split(':')[0] || ''));
+    const el = state.elemById.get(tweetId) || document.querySelector?.(`[data-follone-id="${tweetId}"]`);
+    if (el){
+      if (status === 'pending') markChip(el, 'queued', 'queued');
+      else if (status === 'processing') markChip(el, 'processing', 'running');
+      else if (status === 'done'){
+        markChip(el, 'done', 'done');
+        // auto remove after a short delay to avoid残骸
+        setTimeout(() => {
+          try{ const bb = el.querySelector?.('.cansee-post-chip'); if (bb) bb.remove(); }catch(_e){}
+        }, 1800);
+      } else if (status === 'failed'){
+        markChip(el, 'failed', 'error');
+      }
+    }
+  }catch(_e){}
   scheduleQueueSnapshot(0);
 }
 
@@ -4898,7 +5142,7 @@ if (!done && (state === "character" || state === "none")) {
   // User is already past character selection; show a small persistent guide.
   showOnboardingNudge('ai');
 } else if (!done && state === "tutorial") {
-  showOnboardingNudge('tutorial');
+  // tutorial is handled by PhaseA forced focus after the loader gate.
 }
     } catch (e) {
       // ignore onboarding failures; do not break timeline
